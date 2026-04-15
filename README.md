@@ -60,7 +60,7 @@ By default, it connects to `localhost:3141`.
 
 ## Documentation
 
-Full documentation is available at [https://bbakernoaa.github.io/ectop/](https://bbakernoaa.github.io/ectop/).
+Full documentation is available at [https://noaa-emc.github.io/ectop/](https://noaa-emc.github.io/ectop/).
 
 ## License
 
