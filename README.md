@@ -1,3 +1,5 @@
+[![License: CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](LICENSE)
+
 # ectop
 
 `ectop` is a powerful Textual-based Terminal User Interface (TUI) for monitoring and controlling [ecFlow](https://ecflow.readthedocs.io/en/latest/) servers.
@@ -64,4 +66,8 @@ Full documentation is available at [https://noaa-emc.github.io/ectop/](https://n
 
 ## License
 
-Apache-2.0
+This project is licensed under the [CC0 1.0 Universal License](LICENSE).
+
+## Disclaimer
+> [!IMPORTANT]
+> **Disclaimer:** This software is provided "as is". Please see the full [DISCLAIMER.md](DISCLAIMER.md) for legal information regarding its use in production environments and software.
