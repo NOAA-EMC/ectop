@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import ecflow
 from rich.text import Text
@@ -119,7 +119,7 @@ class SuiteTree(Tree[str]):
         """
         if not self.defs:
             return
-        for suite in self.defs.suites:
+        for suite in cast("list[ecflow.Suite]", self.defs.suites):
             if self._should_show_node(suite):
                 self._safe_call(self._add_node_to_ui, self.root, suite)
 
@@ -192,7 +192,7 @@ class SuiteTree(Tree[str]):
 
         self.app.notify(f"Filter: {self.current_filter or 'All'}")
 
-    def _add_node_to_ui(self, parent_ui_node: TreeNode[str], ecflow_node: Node) -> TreeNode[str]:
+    def _add_node_to_ui(self, parent_ui_node: TreeNode[str], ecflow_node: ecflow.Node) -> TreeNode[str]:
         """
         Add a single ecflow node to the UI tree.
 
@@ -320,7 +320,7 @@ class SuiteTree(Tree[str]):
 
         ecflow_node = self.defs.find_abs_node(node_path)
         if ecflow_node and hasattr(ecflow_node, "nodes"):
-            for child in ecflow_node.nodes:
+            for child in cast("list[ecflow.Node]", ecflow_node.nodes):
                 if self._should_show_node(child):
                     self.app.call_from_thread(self._add_node_to_ui, ui_node, child)
 
