@@ -1,3 +1,7 @@
+[![License: CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://NOAA-EMC.github.io/ectop/)
+[![Disclaimer](https://img.shields.io/badge/disclaimer-read%20first-yellow)](DISCLAIMER.md)
+
 # ectop
 
 `ectop` is a powerful Textual-based Terminal User Interface (TUI) for monitoring and controlling [ecFlow](https://ecflow.readthedocs.io/en/latest/) servers.
@@ -60,8 +64,12 @@ By default, it connects to `localhost:3141`.
 
 ## Documentation
 
-Full documentation is available at [https://bbakernoaa.github.io/ectop/](https://bbakernoaa.github.io/ectop/).
+Full documentation is available at [https://noaa-emc.github.io/ectop/](https://noaa-emc.github.io/ectop/).
 
 ## License
 
-Apache-2.0
+This project is licensed under the [CC0 1.0 Universal License](LICENSE).
+
+## Disclaimer
+> [!IMPORTANT]
+> **Disclaimer:** This software is provided "as is". Please see the full [DISCLAIMER.md](DISCLAIMER.md) for legal information regarding its use in production environments and software.

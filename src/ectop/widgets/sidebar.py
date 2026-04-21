@@ -12,6 +12,7 @@ Sidebar widget for the ecFlow suite tree.
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import ecflow
@@ -61,6 +62,8 @@ class SuiteTree(Tree[str]):
         self.defs: Defs | None = None
         self.current_filter: str | None = None
         self.filters: list[str | None] = TREE_FILTERS
+        self.host: str = ""
+        self.port: int = 0
 
     def update_tree(self, client_host: str, client_port: int, defs: Defs | None) -> None:
         """
@@ -83,6 +86,8 @@ class SuiteTree(Tree[str]):
         -----
         This method is typically called from the main thread after a sync.
         """
+        self.host = client_host
+        self.port = client_port
         self.defs = defs
         self._all_paths_cache: list[str] | None = None
         self.clear()
@@ -183,24 +188,7 @@ class SuiteTree(Tree[str]):
 
         # We need to refresh the tree from local defs
         if self.defs:
-            # Parse host/port from current root label if possible, or just use placeholders
-            label_text = str(self.root.label)
-            host_port = "Unknown"
-            if ":" in label_text:
-                parts = label_text.split(" ")
-                for p in parts:
-                    if ":" in p:
-                        host_port = p
-                        break
-
-            if ":" in host_port:
-                host, port = host_port.split(":", 1)
-                # Remove filter suffix from port if present
-                if "[" in port:
-                    port = port.split("[")[0].strip()
-                self.update_tree(host, int(port), self.defs)
-            else:
-                self.update_tree("Server", 0, self.defs)
+            self.update_tree(self.host, self.port, self.defs)
 
         self.app.notify(f"Filter: {self.current_filter or 'All'}")
 
@@ -409,13 +397,13 @@ class SuiteTree(Tree[str]):
         else:
             self._safe_call(self.app.notify, f"No match found for '{query}'", severity="warning")
 
-    def _safe_call(self, callback: Any, *args: Any, **kwargs: Any) -> Any:
+    def _safe_call(self, callback: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """
         Safely call a UI-related function from either the main thread or a worker.
 
         Parameters
         ----------
-        callback : Any
+        callback : Callable[..., Any]
             The function to call.
         *args : Any
             Positional arguments.

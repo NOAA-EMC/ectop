@@ -115,3 +115,41 @@ def test_parse_various_operators(mock_client, mock_defs):
         parent.add.assert_called_once()
         label = parent.add.call_args[0][0]
         assert f" {op} " in label
+
+
+def test_parse_not_operator(mock_client, mock_defs):
+    """Test the NOT operator handling in expressions."""
+    inspector = WhyInspector("/dummy", mock_client)
+    parent = MagicMock()
+
+    # Mock add to return a child mock
+    child = MagicMock()
+    parent.add.return_value = child
+
+    inspector._parse_expression(parent, "! (/suite/other_node == complete)", mock_defs)
+
+    # Check top-level NOT node
+    # Since we updated the label after adding, we check the final label if possible,
+    # but here we just check add() was called.
+    parent.add.assert_any_call("NOT (Must be false)", expand=True)
+
+    # Check that it recursed to the child
+    child.add.assert_called_once()
+    label = child.add.call_args[0][0]
+    # Inner expression is /suite/other_node == complete.
+    # other_node is active. active == complete is False.
+    assert ICON_NOT_MET in label
+    assert "/suite/other_node" in label
+
+
+def test_parse_leaf_negation(mock_client, mock_defs):
+    """Test negation prefix directly on a leaf node."""
+    inspector = WhyInspector("/dummy", mock_client)
+    parent = MagicMock()
+
+    # ! /suite/test-node.1 == complete -> /suite/test-node.1 is complete.
+    # complete == complete is True. ! (True) is False.
+    inspector._parse_expression(parent, "!/suite/test-node.1 == complete", mock_defs)
+
+    # Now "!/suite/..." starts with "!", so it hits the NOT block first.
+    parent.add.assert_any_call("NOT (Must be false)", expand=True)

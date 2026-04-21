@@ -309,7 +309,7 @@ class WhyInspector(ModalScreen[None]):
             for il in inlimits:
                 limit_node.add(f"🔒 Limit: {il.name()} (Path: {il.value()})")
 
-    def _parse_expression(self, parent_ui_node: TreeNode[str], expr_str: str, defs: Defs) -> None:
+    def _parse_expression(self, parent_ui_node: TreeNode[str], expr_str: str, defs: Defs) -> bool:
         """
         Parse an ecFlow expression and add it to the UI tree.
 
@@ -324,11 +324,12 @@ class WhyInspector(ModalScreen[None]):
 
         Returns
         -------
-        None
+        bool
+            True if the expression is currently met.
         """
         expr_str = expr_str.strip()
         if not expr_str:
-            return
+            return True
 
         # Remove outer parentheses if they wrap the whole expression
         while expr_str.startswith("(") and expr_str.endswith(")"):
@@ -347,6 +348,14 @@ class WhyInspector(ModalScreen[None]):
             else:
                 break
 
+        # Handle NOT operator
+        if expr_str.startswith("!"):
+            not_node = parent_ui_node.add("NOT (Must be false)", expand=True)
+            inner_met = self._parse_expression(not_node, expr_str[1:].strip(), defs)
+            is_met = not inner_met
+            not_node.label = f"{ICON_MET if is_met else ICON_NOT_MET} {not_node.label}"
+            return is_met
+
         # Find top-level ' or ' or ' and ' (lowest precedence first)
         for op, label in [(" or ", EXPR_OR_LABEL), (" and ", EXPR_AND_LABEL)]:
             depth = 0
@@ -359,18 +368,22 @@ class WhyInspector(ModalScreen[None]):
                     op_node = parent_ui_node.add(label, expand=True)
                     left = expr_str[:i].strip()
                     right = expr_str[i + len(op) :].strip()
-                    self._parse_expression(op_node, left, defs)
-                    self._parse_expression(op_node, right, defs)
-                    return
+                    is_met_left = self._parse_expression(op_node, left, defs)
+                    is_met_right = self._parse_expression(op_node, right, defs)
+                    is_met = (is_met_left or is_met_right) if op == " or " else (is_met_left and is_met_right)
+                    op_node.label = f"{ICON_MET if is_met else ICON_NOT_MET} {op_node.label}"
+                    return is_met
 
         # Leaf node (actual condition)
         # Support various comparisons: ==, !=, <, >, <=, >=
         # Regex supports paths with alphanumeric, underscores, dashes, and dots.
-        match = re.search(r"(/[a-zA-Z0-9_\-\./]+)(\s*(==|!=|<=|>=|<|>)\s*(\w+))?", expr_str)
+        # It also handles optional negation prefix if not already caught by the recursion.
+        match = re.search(r"(!?\s*)(/[a-zA-Z0-9_\-\./]+)(\s*(==|!=|<=|>=|<|>)\s*(\w+))?", expr_str)
         if match:
-            path = match.group(1)
-            op = match.group(3) or "=="
-            expected_state = match.group(4) or "complete"
+            negation = match.group(1).strip()
+            path = match.group(2)
+            op = match.group(4) or "=="
+            expected_state = match.group(5) or "complete"
             target_node = defs.find_abs_node(path)
 
             if target_node:
@@ -384,18 +397,25 @@ class WhyInspector(ModalScreen[None]):
                 # Other operators are harder to evaluate without state ordering knowledge,
                 # but we show the status anyway.
 
+                if negation == "!":
+                    is_met = not is_met
+
                 icon = ICON_MET if is_met else ICON_NOT_MET
-                label = f"{icon} {path} {op} {actual_state} (Expected: {expected_state})"
+                neg_str = "! " if negation == "!" else ""
+                label = f"{icon} {neg_str}{path} {op} {actual_state} (Expected: {expected_state})"
 
                 # Special highlighting for aborted nodes
                 if actual_state == "aborted":
                     label = f"[b red]{label} (STOPPED HERE)[/]"
 
                 parent_ui_node.add(label, data=path)
+                return is_met
             else:
                 parent_ui_node.add(f"{ICON_UNKNOWN} {path} (Not found)")
+                return False
         else:
             parent_ui_node.add(f"{ICON_NOTE} {expr_str}")
+            return True
 
     def _add_time_deps(self, parent_ui_node: TreeNode[str], node: Node) -> None:
         """

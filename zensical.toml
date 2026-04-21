@@ -1,0 +1,15 @@
+[project]
+site_name = "ectop"
+site_url = "https://bbakernoaa.github.io/ectop/"
+repo_url = "https://github.com/bbakernoaa/ectop"
+
+nav = [
+    { "Home" = "index.md" },
+    { "Tutorial" = "tutorial.md" },
+    { "Architecture" = "architecture.md" },
+    { "Reference" = "reference.md" },
+    { "Contributing" = "contributing.md" },
+]
+
+[project.plugins.mkdocstrings]
+handlers.python.paths = ["src"]
