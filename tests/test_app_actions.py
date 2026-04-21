@@ -72,3 +72,55 @@ async def test_action_refresh_logic(app: Ectop) -> None:
         calls = [c.args for c in mock_call.call_args_list]
         # One of the calls should be status_bar.update_status
         assert any(mock_sb.update_status in call for call in calls)
+
+
+def test_action_toggle_live(app: Ectop) -> None:
+    """Test action_toggle_live toggles is_live state."""
+    mock_mc = MagicMock()
+    mock_mc.is_live = False
+
+    with patch.object(app, "query_one", return_value=mock_mc), patch.object(app, "notify"):
+        app.action_toggle_live()
+        assert mock_mc.is_live is True
+
+        app.action_toggle_live()
+        assert mock_mc.is_live is False
+
+
+def test_action_copy_path(app: Ectop) -> None:
+    """Test action_copy_path with and without selection."""
+    with patch.object(app, "get_selected_path") as mock_get_path, \
+         patch.object(app, "notify") as mock_notify, \
+         patch.object(app, "copy_to_clipboard") as mock_copy:
+
+        # Case 1: No selection
+        mock_get_path.return_value = None
+        app.action_copy_path()
+        mock_notify.assert_called_with("No node selected", severity="warning")
+
+        # Case 2: Selection exists
+        mock_get_path.return_value = "/suite/task"
+        app.action_copy_path()
+        mock_copy.assert_called_with("/suite/task")
+        mock_notify.assert_called_with("Copied to clipboard: /suite/task")
+
+
+def test_action_commands(app: Ectop) -> None:
+    """Test generic client commands like suspend, resume, kill, force, requeue."""
+    with patch.object(app, "get_selected_path", return_value="/s/t"), \
+         patch.object(app, "_run_client_command") as mock_run:
+
+        app.action_suspend()
+        mock_run.assert_called_with("suspend", "/s/t")
+
+        app.action_resume()
+        mock_run.assert_called_with("resume", "/s/t")
+
+        app.action_kill()
+        mock_run.assert_called_with("kill", "/s/t")
+
+        app.action_force()
+        mock_run.assert_called_with("force_complete", "/s/t")
+
+        app.action_requeue()
+        mock_run.assert_called_with("requeue", "/s/t")
