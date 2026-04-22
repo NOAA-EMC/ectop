@@ -162,3 +162,53 @@ def test_client_requeue_failure():
         mock_client.return_value.requeue.side_effect = RuntimeError("Error")
         with pytest.raises(RuntimeError, match="Failed to requeue /path"):
             client.requeue("/path")
+
+
+def test_client_server_control():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+
+        # Restart
+        client.restart_server()
+        mock_client.return_value.restart_server.assert_called_once()
+
+        # Halt
+        client.halt_server()
+        mock_client.return_value.halt_server.assert_called_once()
+
+
+def test_client_versions():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+
+        mock_client.return_value.version.return_value = "v1"
+        assert client.version() == "v1"
+
+        mock_client.return_value.server_version.return_value = "v2"
+        assert client.server_version() == "v2"
+
+
+def test_client_version_failures():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+
+        mock_client.return_value.version.side_effect = RuntimeError("fail")
+        with pytest.raises(RuntimeError, match="Failed to get client version"):
+            client.version()
+
+        mock_client.return_value.server_version.side_effect = RuntimeError("fail")
+        with pytest.raises(RuntimeError, match="Failed to get server version"):
+            client.server_version()
+
+
+def test_client_server_control_failures():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+
+        mock_client.return_value.restart_server.side_effect = RuntimeError("fail")
+        with pytest.raises(RuntimeError, match="Failed to restart server"):
+            client.restart_server()
+
+        mock_client.return_value.halt_server.side_effect = RuntimeError("fail")
+        with pytest.raises(RuntimeError, match="Failed to halt server"):
+            client.halt_server()

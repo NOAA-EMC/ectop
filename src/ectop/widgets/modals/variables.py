@@ -313,7 +313,7 @@ class VariableTweaker(ModalScreen[None]):
                     return
 
             self.app.call_from_thread(self._reset_input)
-            self.refresh_vars()
+            self.app.call_from_thread(self.refresh_vars)
         except RuntimeError as e:
             self.app.call_from_thread(self.app.notify, f"Error: {e}", severity="error")
         except Exception as e:
@@ -413,7 +413,7 @@ class VariableTweaker(ModalScreen[None]):
         try:
             self.client.alter(self.node_path, "delete_variable", row_key)
             self.app.call_from_thread(self.app.notify, f"Deleted {row_key}")
-            self.refresh_vars()
+            self.app.call_from_thread(self.refresh_vars)
         except RuntimeError as e:
             self.app.call_from_thread(self.app.notify, f"Error: {e}", severity="error")
         except Exception as e:

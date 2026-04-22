@@ -41,8 +41,10 @@ def test_action_requeue(app: Ectop) -> None:
 def test_action_copy_path(app: Ectop) -> None:
     """Test action_copy_path copies to clipboard and notifies the user."""
     # Test with clipboard support
-    with patch.object(app, "copy_to_clipboard") as mock_copy, patch.object(app, "notify") as mock_notify, patch.object(
-        app, "get_selected_path", return_value="/s1/t1"
+    with (
+        patch.object(app, "copy_to_clipboard") as mock_copy,
+        patch.object(app, "notify") as mock_notify,
+        patch.object(app, "get_selected_path", return_value="/s1/t1"),
     ):
         app.action_copy_path()
         mock_copy.assert_called_once_with("/s1/t1")

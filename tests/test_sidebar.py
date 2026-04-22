@@ -6,7 +6,7 @@ Tests for the Sidebar (SuiteTree) widget.
     If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from rich.text import Text
@@ -91,8 +91,10 @@ def test_load_children(mock_defs: MagicMock) -> None:
     placeholder.label = Text("loading...")
     ui_node.children = [placeholder]
 
-    with patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop, \
-         patch.object(SuiteTree, "_load_children_worker") as mock_worker:
+    with (
+        patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop,
+        patch.object(SuiteTree, "_load_children_worker") as mock_worker,
+    ):
         mock_app = MagicMock()
         mock_app_prop.return_value = mock_app
         tree._load_children(ui_node)
@@ -117,8 +119,7 @@ def test_load_children_worker(mock_defs: MagicMock) -> None:
     ui_node = MagicMock()
     ui_node.data = "/s2"
 
-    with patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop, \
-         patch.object(SuiteTree, "_add_node_to_ui"):
+    with patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop, patch.object(SuiteTree, "_add_node_to_ui"):
         mock_app = MagicMock()
         mock_app_prop.return_value = mock_app
         tree._load_children_worker(ui_node, "/s2")
@@ -155,9 +156,11 @@ def test_select_by_path(mock_defs: MagicMock) -> None:
     child_t2a.data = "/s2/t2a"
     child_s2.children = [child_t2a]
 
-    with patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop, \
-         patch.object(SuiteTree, "_load_children") as mock_load, \
-         patch.object(SuiteTree, "_select_and_reveal") as mock_select:
+    with (
+        patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop,
+        patch.object(SuiteTree, "_load_children") as mock_load,
+        patch.object(SuiteTree, "_select_and_reveal") as mock_select,
+    ):
         mock_app = MagicMock()
         mock_app_prop.return_value = mock_app
         # Use logic method for synchronous test
@@ -185,9 +188,11 @@ def test_find_and_select_caching(mock_defs: MagicMock) -> None:
         mock_app_prop.return_value = mock_app
         tree.root = MagicMock()
 
-        with patch.object(SuiteTree, "cursor_node", new=None), patch.object(
-            SuiteTree, "_select_by_path_logic"
-        ) as mock_select_logic, patch.object(SuiteTree, "_add_node_to_ui"):
+        with (
+            patch.object(SuiteTree, "cursor_node", new=None),
+            patch.object(SuiteTree, "_select_by_path_logic") as mock_select_logic,
+            patch.object(SuiteTree, "_add_node_to_ui"),
+        ):
             tree._find_and_select_logic("t2a")
             assert hasattr(tree, "_all_paths_cache")
             assert tree._all_paths_cache is not None
@@ -211,7 +216,7 @@ def test_should_show_node(mock_defs: MagicMock) -> None:
     tree = SuiteTree("Test")
     suite1 = mock_defs.suites[0]  # complete
     suite2 = mock_defs.suites[1]  # active
-    task2a = suite2.nodes[0]     # queued
+    task2a = suite2.nodes[0]  # queued
 
     # No filter
     tree.current_filter = None
@@ -255,7 +260,6 @@ def test_populate_tree_worker(mock_defs: MagicMock) -> None:
     tree.defs = mock_defs
     tree.root = MagicMock()
 
-    with patch.object(tree, "_should_show_node", return_value=True), \
-         patch.object(tree, "_safe_call") as mock_safe:
+    with patch.object(tree, "_should_show_node", return_value=True), patch.object(tree, "_safe_call") as mock_safe:
         tree._populate_tree_worker()
         assert mock_safe.call_count == len(mock_defs.suites)

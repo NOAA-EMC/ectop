@@ -2,7 +2,7 @@
 # WARNING: If you modify features, API, or usage, you MUST update the
 # documentation immediately.
 # #############################################################################
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 from textual.widgets import RichLog, Static
 
@@ -104,9 +104,10 @@ def test_main_content_search_logic() -> None:
     """Test the search match feedback logic in MainContent."""
     mc = MainContent()
     # Use patch.object with PropertyMock for app and active
-    with patch.object(MainContent, "app", new_callable=PropertyMock) as mock_app_prop, \
-         patch.object(MainContent, "active", new_callable=PropertyMock) as mock_active_prop:
-
+    with (
+        patch.object(MainContent, "app", new_callable=PropertyMock) as mock_app_prop,
+        patch.object(MainContent, "active", new_callable=PropertyMock) as mock_active_prop,
+    ):
         mock_app = MagicMock()
         mock_app_prop.return_value = mock_app
 

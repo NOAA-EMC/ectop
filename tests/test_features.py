@@ -70,8 +70,9 @@ def test_search_logic() -> None:
     tree.scroll_to_node = MagicMock()
 
     # We need to manually call the method since it's an instance method
-    with patch.object(SuiteTree, "cursor_node", new_callable=PropertyMock) as mock_cursor, patch.object(
-        SuiteTree, "app", new=MagicMock()
+    with (
+        patch.object(SuiteTree, "cursor_node", new_callable=PropertyMock) as mock_cursor,
+        patch.object(SuiteTree, "app", new=MagicMock()),
     ):
         mock_cursor.return_value = None
         # Mocking the definition walk
