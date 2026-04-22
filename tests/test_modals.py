@@ -91,9 +91,11 @@ def test_why_inspector_expression_parsing(mock_client: MagicMock) -> None:
     mock_client : MagicMock
         The mock EcflowClient.
     """
+    from ectop.widgets.modals.why import DepData
+
     inspector = WhyInspector("/path", mock_client)
 
-    parent_node = MagicMock()
+    parent_data = DepData("Root")
     defs = MagicMock()
 
     # Mock nodes in defs
@@ -105,25 +107,24 @@ def test_why_inspector_expression_parsing(mock_client: MagicMock) -> None:
     defs.find_abs_node.side_effect = lambda p: {"/suite/a": node_a, "/suite/b": node_b}.get(p)
 
     # Test AND expression
-    inspector._parse_expression(parent_node, "(/suite/a == complete) and (/suite/b == complete)", defs)
+    inspector._parse_expression_data(parent_data, "(/suite/a == complete) and (/suite/b == complete)", defs)
 
     # Check that AND node was added
-    parent_node.add.assert_any_call(EXPR_AND_LABEL, expand=True)
+    assert any(child.label == EXPR_AND_LABEL for child in parent_data.children)
 
     # Test OR expression
-    parent_node.reset_mock()
-    inspector._parse_expression(parent_node, "(/suite/a == active) or (/suite/b == active)", defs)
-    parent_node.add.assert_any_call(EXPR_OR_LABEL, expand=True)
+    parent_data = DepData("Root")
+    inspector._parse_expression_data(parent_data, "(/suite/a == active) or (/suite/b == active)", defs)
+    assert any(child.label == EXPR_OR_LABEL for child in parent_data.children)
 
     # Test nested expression
-    parent_node.reset_mock()
-    # Mock the return value of add so we can check recursive calls
-    sub_node = MagicMock()
-    parent_node.add.return_value = sub_node
-
-    inspector._parse_expression(parent_node, "(/suite/a == complete) or ((/suite/b == active) and (/suite/a == complete))", defs)
-    parent_node.add.assert_any_call(EXPR_OR_LABEL, expand=True)
-    sub_node.add.assert_any_call(EXPR_AND_LABEL, expand=True)
+    parent_data = DepData("Root")
+    inspector._parse_expression_data(
+        parent_data, "(/suite/a == complete) or ((/suite/b == active) and (/suite/a == complete))", defs
+    )
+    assert any(child.label == EXPR_OR_LABEL for child in parent_data.children)
+    or_node = next(child for child in parent_data.children if child.label == EXPR_OR_LABEL)
+    assert any(child.label == EXPR_AND_LABEL for child in or_node.children)
 
 
 def test_variable_tweaker_workers(mock_client: MagicMock) -> None:
@@ -183,7 +184,7 @@ def test_why_inspector_worker(mock_client: MagicMock) -> None:
 
         tree = MagicMock()
 
-        with patch.object(WhyInspector, "_populate_dep_tree"):
+        with patch.object(WhyInspector, "_gather_dependency_data"), patch.object(WhyInspector, "_update_tree_ui"):
             inspector._refresh_deps_logic(tree)
             mock_client.sync_local.assert_called_once()
             mock_client.get_defs.assert_called_once()
@@ -191,8 +192,10 @@ def test_why_inspector_worker(mock_client: MagicMock) -> None:
 
 def test_why_inspector_complex_nested_expression(mock_client: MagicMock) -> None:
     """Test deeply nested expressions in WhyInspector."""
+    from ectop.widgets.modals.why import DepData
+
     inspector = WhyInspector("/path", mock_client)
-    parent_node = MagicMock()
+    parent_data = DepData("Root")
     defs = MagicMock()
 
     # (A and B) or (C and D)
@@ -203,14 +206,14 @@ def test_why_inspector_complex_nested_expression(mock_client: MagicMock) -> None
     mock_node.get_state.return_value = "complete"
     defs.find_abs_node.return_value = mock_node
 
-    inspector._parse_expression(parent_node, expr, defs)
+    inspector._parse_expression_data(parent_data, expr, defs)
 
     # Should have OR at top
-    parent_node.add.assert_any_call(EXPR_OR_LABEL, expand=True)
+    assert any(child.label == EXPR_OR_LABEL for child in parent_data.children)
+    or_node = next(child for child in parent_data.children if child.label == EXPR_OR_LABEL)
 
     # Should have AND nodes added to the OR node
-    or_node = parent_node.add.return_value
-    or_node.add.assert_any_call(EXPR_AND_LABEL, expand=True)
+    assert any(child.label == EXPR_AND_LABEL for child in or_node.children)
 
 
 def test_variable_tweaker_error_handling(mock_client: MagicMock) -> None:
