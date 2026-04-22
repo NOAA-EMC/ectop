@@ -447,12 +447,39 @@ class Ectop(App):
         except Exception:
             return None
 
-    @work(thread=True)
     def action_load_node(self) -> None:
-        """Fetch Output, Script, and Job files for the selected node."""
+        """
+        Fetch Output, Script, and Job files for the selected node.
+
+        Returns
+        -------
+        None
+        """
         path = self.get_selected_path()
-        if not path or not self.ecflow_client:
-            self.call_from_thread(self.notify, "No node selected", severity="warning")
+        if not path:
+            self.notify("No node selected", severity="warning")
+            return
+        self._load_node_worker(path)
+
+    @work(thread=True, exclusive=True)
+    def _load_node_worker(self, path: str) -> None:
+        """
+        Worker to fetch files for a node.
+
+        Parameters
+        ----------
+        path : str
+            The ecFlow node path.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This is a background worker that performs blocking I/O and UI updates.
+        """
+        if not self.ecflow_client:
             return
 
         self.call_from_thread(self.notify, f"Loading files for {path}...")
@@ -610,20 +637,48 @@ class Ectop(App):
         if content_area.is_live:
             content_area.active = "tab_output"
 
-    @work(thread=True)
     def _live_log_tick(self) -> None:
-        """Periodic tick to update the live log if enabled."""
+        """
+        Periodic tick to update the live log if enabled.
+
+        Returns
+        -------
+        None
+        """
         if not self.ecflow_client:
             return
         content_area = self.query_one("#main_content", MainContent)
         if content_area.is_live and content_area.active == "tab_output":
             path = self.get_selected_path()
             if path:
-                try:
-                    content = self.ecflow_client.file(path, "jobout")
-                    self.call_from_thread(content_area.update_log, content, append=True)
-                except RuntimeError:
-                    pass
+                self._live_log_worker(path)
+
+    @work(thread=True, exclusive=True)
+    def _live_log_worker(self, path: str) -> None:
+        """
+        Worker to fetch the latest log content for live updates.
+
+        Parameters
+        ----------
+        path : str
+            The ecFlow node path.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This is a background worker that performs blocking I/O and UI updates.
+        """
+        if not self.ecflow_client:
+            return
+        try:
+            content = self.ecflow_client.file(path, "jobout")
+            content_area = self.query_one("#main_content", MainContent)
+            self.call_from_thread(content_area.update_log, content, append=True)
+        except RuntimeError:
+            pass
 
     def action_why(self) -> None:
         """
@@ -663,12 +718,39 @@ class Ectop(App):
         """
         self.query_one("#main_content", MainContent).action_search()
 
-    @work(thread=True)
     def action_edit_script(self) -> None:
-        """Open the node script in an editor and update it on the server."""
+        """
+        Open the node script in an editor and update it on the server.
+
+        Returns
+        -------
+        None
+        """
         path = self.get_selected_path()
-        if not path or not self.ecflow_client:
-            self.call_from_thread(self.notify, "No node selected", severity="warning")
+        if not path:
+            self.notify("No node selected", severity="warning")
+            return
+        self._edit_script_worker(path)
+
+    @work(thread=True, exclusive=True)
+    def _edit_script_worker(self, path: str) -> None:
+        """
+        Worker to fetch script and prepare for editing.
+
+        Parameters
+        ----------
+        path : str
+            The ecFlow node path.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This is a background worker that performs blocking I/O and schedules an editor.
+        """
+        if not self.ecflow_client:
             return
 
         try:
