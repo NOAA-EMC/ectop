@@ -319,8 +319,8 @@ class Ectop(App):
         if event.node.data:
             self.action_load_node()
 
-    @work(thread=True)
-    def _initial_connect(self) -> None:
+    @work()
+    async def _initial_connect(self) -> None:
         """
         Perform initial connection to the ecFlow server.
 
@@ -330,19 +330,19 @@ class Ectop(App):
 
         Notes
         -----
-        This is a background worker that performs blocking I/O.
+        This is a background worker that performs async I/O.
         """
         try:
             self.ecflow_client = EcflowClient(self.host, self.port)
-            self.ecflow_client.ping()
+            await self.ecflow_client.ping()
             # Initial refresh
-            self.action_refresh()
+            await self.action_refresh()
         except RuntimeError as e:
-            self.call_from_thread(self.notify, f"{ERROR_CONNECTION_FAILED}: {e}", severity="error", timeout=10)
+            self.notify(f"{ERROR_CONNECTION_FAILED}: {e}", severity="error", timeout=10)
             tree = self.query_one("#suite_tree", SuiteTree)
-            self.call_from_thread(self._update_tree_error, tree)
+            self._update_tree_error(tree)
         except Exception as e:
-            self.call_from_thread(self.notify, f"Unexpected Error: {e}", severity="error")
+            self.notify(f"Unexpected Error: {e}", severity="error")
 
     def _update_tree_error(self, tree: SuiteTree) -> None:
         """
@@ -359,8 +359,8 @@ class Ectop(App):
         """
         tree.root.label = f"[red]{ERROR_CONNECTION_FAILED} (Check Host/Port)[/]"
 
-    @work(exclusive=True, thread=True)
-    def action_refresh(self) -> None:
+    @work(exclusive=True)
+    async def action_refresh(self) -> None:
         """
         Fetch suites from server and rebuild the tree.
 
@@ -370,67 +370,63 @@ class Ectop(App):
 
         Notes
         -----
-        This is a background worker that performs blocking I/O.
+        This is a background worker that performs async I/O.
         """
         if not self.ecflow_client:
             return
 
-        self.call_from_thread(self.notify, "Refreshing tree...")
+        self.notify("Refreshing tree...")
 
         tree = self.query_one("#suite_tree", SuiteTree)
         status_bar = self.query_one("#status_bar", StatusBar)
         try:
-            self.ecflow_client.sync_local()
-            defs = self.ecflow_client.get_defs()
+            await self.ecflow_client.sync_local()
+            defs = await self.ecflow_client.get_defs()
             status = "Connected"
             version = "Unknown"
             if defs:
                 status = str(defs.get_server_state())
             try:
-                version = self.ecflow_client.server_version()
+                version = await self.ecflow_client.server_version()
             except RuntimeError:
                 pass
 
-            self.call_from_thread(tree.update_tree, self.ecflow_client.host, self.ecflow_client.port, defs)
-            self.call_from_thread(
-                status_bar.update_status, self.ecflow_client.host, self.ecflow_client.port, status=status, version=version
-            )
-            self.call_from_thread(self.notify, "Tree Refreshed")
+            tree.update_tree(self.ecflow_client.host, self.ecflow_client.port, defs)
+            status_bar.update_status(self.ecflow_client.host, self.ecflow_client.port, status=status, version=version)
+            self.notify("Tree Refreshed")
         except RuntimeError as e:
-            self.call_from_thread(
-                status_bar.update_status, self.ecflow_client.host, self.ecflow_client.port, status=STATUS_SYNC_ERROR
-            )
-            self.call_from_thread(self.notify, f"Refresh Error: {e}", severity="error")
+            status_bar.update_status(self.ecflow_client.host, self.ecflow_client.port, status=STATUS_SYNC_ERROR)
+            self.notify(f"Refresh Error: {e}", severity="error")
         except Exception as e:
-            self.call_from_thread(self.notify, f"Unexpected Error: {e}", severity="error")
+            self.notify(f"Unexpected Error: {e}", severity="error")
 
-    @work(thread=True)
-    def action_restart_server(self) -> None:
+    @work()
+    async def action_restart_server(self) -> None:
         """
         Restart the ecFlow server (RUNNING).
         """
         if not self.ecflow_client:
             return
         try:
-            self.ecflow_client.restart_server()
-            self.call_from_thread(self.notify, "Server Started (RUNNING)")
-            self.action_refresh()
+            await self.ecflow_client.restart_server()
+            self.notify("Server Started (RUNNING)")
+            await self.action_refresh()
         except Exception as e:
-            self.call_from_thread(self.notify, f"Restart Error: {e}", severity="error")
+            self.notify(f"Restart Error: {e}", severity="error")
 
-    @work(thread=True)
-    def action_halt_server(self) -> None:
+    @work()
+    async def action_halt_server(self) -> None:
         """
         Halt the ecFlow server (HALT).
         """
         if not self.ecflow_client:
             return
         try:
-            self.ecflow_client.halt_server()
-            self.call_from_thread(self.notify, "Server Halted (HALT)")
-            self.action_refresh()
+            await self.ecflow_client.halt_server()
+            self.notify("Server Halted (HALT)")
+            await self.action_refresh()
         except Exception as e:
-            self.call_from_thread(self.notify, f"Halt Error: {e}", severity="error")
+            self.notify(f"Halt Error: {e}", severity="error")
 
     def get_selected_path(self) -> str | None:
         """
@@ -461,8 +457,8 @@ class Ectop(App):
             return
         self._load_node_worker(path)
 
-    @work(thread=True, exclusive=True)
-    def _load_node_worker(self, path: str) -> None:
+    @work(exclusive=True)
+    async def _load_node_worker(self, path: str) -> None:
         """
         Worker to fetch files for a node.
 
@@ -477,43 +473,43 @@ class Ectop(App):
 
         Notes
         -----
-        This is a background worker that performs blocking I/O and UI updates.
+        This is a background worker that performs async I/O and UI updates.
         """
         if not self.ecflow_client:
             return
 
-        self.call_from_thread(self.notify, f"Loading files for {path}...")
+        self.notify(f"Loading files for {path}...")
         content_area = self.query_one("#main_content", MainContent)
 
         try:
             # Sync to get latest try numbers for filenames
-            self.ecflow_client.sync_local()
+            await self.ecflow_client.sync_local()
         except RuntimeError:
             pass
 
         # 1. Output Log
         try:
-            content = self.ecflow_client.file(path, "jobout")
-            self.call_from_thread(content_area.update_log, content)
+            content = await self.ecflow_client.file(path, "jobout")
+            content_area.update_log(content)
         except RuntimeError:
-            self.call_from_thread(content_area.show_error, "#log_output", "File type 'jobout' not found.")
+            content_area.show_error("#log_output", "File type 'jobout' not found.")
 
         # 2. Script
         try:
-            content = self.ecflow_client.file(path, "script")
-            self.call_from_thread(content_area.update_script, content)
+            content = await self.ecflow_client.file(path, "script")
+            content_area.update_script(content)
         except RuntimeError:
-            self.call_from_thread(content_area.show_error, "#view_script", "File type 'script' not available.")
+            content_area.show_error("#view_script", "File type 'script' not available.")
 
         # 3. Job
         try:
-            content = self.ecflow_client.file(path, "job")
-            self.call_from_thread(content_area.update_job, content)
+            content = await self.ecflow_client.file(path, "job")
+            content_area.update_job(content)
         except RuntimeError:
-            self.call_from_thread(content_area.show_error, "#view_job", "File type 'job' not available.")
+            content_area.show_error("#view_job", "File type 'job' not available.")
 
-    @work(thread=True)
-    def _run_client_command(self, command_name: str, path: str | None) -> None:
+    @work()
+    async def _run_client_command(self, command_name: str, path: str | None) -> None:
         """
         Generic helper to run ecflow commands in a worker thread.
 
@@ -530,19 +526,19 @@ class Ectop(App):
 
         Notes
         -----
-        This is a background worker that performs blocking I/O.
+        This is a background worker that performs async I/O.
         """
         if not path or not self.ecflow_client:
             return
         try:
             method = getattr(self.ecflow_client, command_name)
-            method(path)
-            self.call_from_thread(self.notify, f"{command_name.replace('_', ' ').capitalize()}: {path}")
-            self.action_refresh()
+            await method(path)
+            self.notify(f"{command_name.replace('_', ' ').capitalize()}: {path}")
+            await self.action_refresh()
         except RuntimeError as e:
-            self.call_from_thread(self.notify, f"Command Error: {e}", severity="error")
+            self.notify(f"Command Error: {e}", severity="error")
         except Exception as e:
-            self.call_from_thread(self.notify, f"Unexpected Error: {e}", severity="error")
+            self.notify(f"Unexpected Error: {e}", severity="error")
 
     def action_suspend(self) -> None:
         """
@@ -653,8 +649,8 @@ class Ectop(App):
             if path:
                 self._live_log_worker(path)
 
-    @work(thread=True, exclusive=True)
-    def _live_log_worker(self, path: str) -> None:
+    @work(exclusive=True)
+    async def _live_log_worker(self, path: str) -> None:
         """
         Worker to fetch the latest log content for live updates.
 
@@ -669,14 +665,14 @@ class Ectop(App):
 
         Notes
         -----
-        This is a background worker that performs blocking I/O and UI updates.
+        This is a background worker that performs async I/O and UI updates.
         """
         if not self.ecflow_client:
             return
         try:
-            content = self.ecflow_client.file(path, "jobout")
+            content = await self.ecflow_client.file(path, "jobout")
             content_area = self.query_one("#main_content", MainContent)
-            self.call_from_thread(content_area.update_log, content, append=True)
+            content_area.update_log(content, append=True)
         except RuntimeError:
             pass
 
@@ -732,8 +728,8 @@ class Ectop(App):
             return
         self._edit_script_worker(path)
 
-    @work(thread=True, exclusive=True)
-    def _edit_script_worker(self, path: str) -> None:
+    @work(exclusive=True)
+    async def _edit_script_worker(self, path: str) -> None:
         """
         Worker to fetch script and prepare for editing.
 
@@ -748,23 +744,23 @@ class Ectop(App):
 
         Notes
         -----
-        This is a background worker that performs blocking I/O and schedules an editor.
+        This is a background worker that performs async I/O and schedules an editor.
         """
         if not self.ecflow_client:
             return
 
         try:
-            content = self.ecflow_client.file(path, "script")
+            content = await self.ecflow_client.file(path, "script")
             with tempfile.NamedTemporaryFile(suffix=".ecf", delete=False, mode="w") as f:
                 f.write(content)
                 temp_path = f.name
 
-            self.call_from_thread(self._run_editor, temp_path, path, content)
+            self._run_editor(temp_path, path, content)
 
         except RuntimeError as e:
-            self.call_from_thread(self.notify, f"Edit Error: {e}", severity="error")
+            self.notify(f"Edit Error: {e}", severity="error")
         except Exception as e:
-            self.call_from_thread(self.notify, f"Unexpected Error: {e}", severity="error")
+            self.notify(f"Unexpected Error: {e}", severity="error")
 
     def _run_editor(self, temp_path: str, path: str, old_content: str) -> None:
         """
@@ -785,8 +781,8 @@ class Ectop(App):
 
         self._finish_edit(temp_path, path, old_content)
 
-    @work(thread=True)
-    def _finish_edit(self, temp_path: str, path: str, old_content: str) -> None:
+    @work()
+    async def _finish_edit(self, temp_path: str, path: str, old_content: str) -> None:
         """
         Process the edited script and update the server.
 
@@ -808,15 +804,15 @@ class Ectop(App):
 
             if new_content != old_content:
                 if self.ecflow_client:
-                    self.ecflow_client.alter(path, "change", "script", new_content)
-                    self.call_from_thread(self.notify, "Script updated on server")
-                    self.call_from_thread(self._prompt_requeue, path)
+                    await self.ecflow_client.alter(path, "change", "script", new_content)
+                    self.notify("Script updated on server")
+                    self._prompt_requeue(path)
             else:
-                self.call_from_thread(self.notify, "No changes detected")
+                self.notify("No changes detected")
         except RuntimeError as e:
-            self.call_from_thread(self.notify, f"Update Error: {e}", severity="error")
+            self.notify(f"Update Error: {e}", severity="error")
         except Exception as e:
-            self.call_from_thread(self.notify, f"Unexpected Error: {e}", severity="error")
+            self.notify(f"Unexpected Error: {e}", severity="error")
 
     def _prompt_requeue(self, path: str) -> None:
         """

@@ -147,8 +147,8 @@ class WhyInspector(ModalScreen[None]):
         tree = self.query_one("#dep_tree", Tree)
         self._refresh_deps_worker(tree)
 
-    @work(thread=True)
-    def _refresh_deps_worker(self, tree: Tree) -> None:
+    @work()
+    async def _refresh_deps_worker(self, tree: Tree) -> None:
         """
         Worker to fetch dependencies from the server and rebuild the tree.
 
@@ -156,11 +156,11 @@ class WhyInspector(ModalScreen[None]):
             tree: The tree widget to refresh.
 
         Notes:
-            This is a background worker that performs blocking I/O.
+            This is a background worker that performs async I/O.
         """
-        self._refresh_deps_logic(tree)
+        await self._refresh_deps_logic(tree)
 
-    def _refresh_deps_logic(self, tree: Tree) -> None:
+    async def _refresh_deps_logic(self, tree: Tree) -> None:
         """
         The actual logic for fetching dependencies and updating the UI tree.
 
@@ -171,27 +171,27 @@ class WhyInspector(ModalScreen[None]):
             RuntimeError: If server synchronization fails.
         """
         try:
-            self.client.sync_local()
-            defs = self.client.get_defs()
+            await self.client.sync_local()
+            defs = await self.client.get_defs()
             if not defs:
-                self.app.call_from_thread(self._update_tree_ui, tree, DepData("Server Empty"))
+                self._update_tree_ui(tree, DepData("Server Empty"))
                 return
 
             node = defs.find_abs_node(self.node_path)
             if not node:
-                self.app.call_from_thread(self._update_tree_ui, tree, DepData("Node not found"))
+                self._update_tree_ui(tree, DepData("Node not found"))
                 return
 
             # Gather data in the worker thread
             dep_data = self._gather_dependency_data(node, defs)
 
-            # Update UI on the main thread
-            self.app.call_from_thread(self._update_tree_ui, tree, dep_data)
+            # Update UI
+            self._update_tree_ui(tree, dep_data)
 
         except RuntimeError as e:
-            self.app.call_from_thread(self._update_tree_ui, tree, DepData(f"Error: {e}"))
+            self._update_tree_ui(tree, DepData(f"Error: {e}"))
         except Exception as e:
-            self.app.call_from_thread(self._update_tree_ui, tree, DepData(f"Unexpected Error: {e}"))
+            self._update_tree_ui(tree, DepData(f"Unexpected Error: {e}"))
 
     def _gather_dependency_data(self, node: Node, defs: Defs) -> DepData:
         """
@@ -327,7 +327,7 @@ class WhyInspector(ModalScreen[None]):
                         depth += 1
                     elif expr_str[i] == ")":
                         depth -= 1
-                    elif depth == 0 and expr_str[i : i + len(op)] == op:
+                    if depth == 0 and expr_str[i : i + len(op)] == op:
                         op_node = DepData(label)
                         left = expr_str[:i].strip()
                         right = expr_str[i + len(op) :].strip()

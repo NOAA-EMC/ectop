@@ -11,7 +11,7 @@ Tests for Ectop action methods.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -22,7 +22,7 @@ from ectop.app import Ectop
 def app() -> Ectop:
     """Create an Ectop app instance with mocked components."""
     app = Ectop(host="localhost", port=3141)
-    app.ecflow_client = MagicMock()
+    app.ecflow_client = AsyncMock()
     return app
 
 
@@ -48,15 +48,15 @@ def test_action_halt_server(app: Ectop) -> None:
 async def test_action_refresh_logic(app: Ectop) -> None:
     """Test the logic inside action_refresh."""
     # We need to mock query_one for tree and status_bar
-    mock_tree = MagicMock()
-    mock_sb = MagicMock()
+    mock_tree = AsyncMock()
+    mock_sb = AsyncMock()
 
     def side_effect(selector, type=None):
         if "#suite_tree" in selector:
             return mock_tree
         if "#status_bar" in selector:
             return mock_sb
-        return MagicMock()
+        return AsyncMock()
 
     with patch.object(app, "query_one", side_effect=side_effect), patch.object(app, "call_from_thread") as mock_call:
         app.ecflow_client.get_defs.return_value.get_server_state.return_value = "RUNNING"
@@ -76,7 +76,7 @@ async def test_action_refresh_logic(app: Ectop) -> None:
 
 def test_action_toggle_live(app: Ectop) -> None:
     """Test action_toggle_live toggles is_live state."""
-    mock_mc = MagicMock()
+    mock_mc = AsyncMock()
     mock_mc.is_live = False
 
     with patch.object(app, "query_one", return_value=mock_mc), patch.object(app, "notify"):
@@ -127,7 +127,7 @@ def test_action_commands(app: Ectop) -> None:
 
 def test_action_load_node_worker(app: Ectop) -> None:
     """Test action_load_node worker with successful file fetches."""
-    mock_mc = MagicMock()
+    mock_mc = AsyncMock()
     with (
         patch.object(app, "get_selected_path", return_value="/s/t"),
         patch.object(app, "query_one", return_value=mock_mc),
@@ -146,7 +146,7 @@ def test_action_load_node_worker(app: Ectop) -> None:
 
 def test_action_load_node_worker_errors(app: Ectop) -> None:
     """Test action_load_node worker with missing files."""
-    mock_mc = MagicMock()
+    mock_mc = AsyncMock()
     with (
         patch.object(app, "get_selected_path", return_value="/s/t"),
         patch.object(app, "query_one", return_value=mock_mc),
@@ -192,7 +192,7 @@ def test_action_why_variables(app: Ectop) -> None:
 
 def test_live_log_tick(app: Ectop) -> None:
     """Test _live_log_tick logic."""
-    mock_mc = MagicMock()
+    mock_mc = AsyncMock()
     mock_mc.is_live = True
     mock_mc.active = "tab_output"
 
