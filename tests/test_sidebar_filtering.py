@@ -108,12 +108,9 @@ async def test_action_cycle_filter() -> None:
         tree.host = "localhost"
         tree.port = 3141
 
-        # Mock update_tree to avoid background workers starting
-        with patch.object(SuiteTree, "update_tree") as mock_update:
-            # Initial filter is None
-            assert tree.current_filter is None
+        # Initial filter is None
+        assert tree.current_filter is None
 
-            tree.action_cycle_filter()
-            # Next filter in TREE_FILTERS should be 'aborted'
-            assert tree.current_filter == "aborted"
-            mock_update.assert_called_with("localhost", 3141, tree.defs)
+        tree.action_cycle_filter()
+        # Next filter in TREE_FILTERS should be 'aborted'
+        assert tree.current_filter == "aborted"

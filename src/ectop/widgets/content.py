@@ -14,11 +14,14 @@ from __future__ import annotations
 from typing import Any
 
 from rich.syntax import Syntax
+from textual import work
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
+from textual.reactive import reactive
 from textual.widgets import Input, RichLog, Static, TabbedContent, TabPane
 
 from ectop.constants import DEFAULT_SHELL, SYNTAX_THEME
+from ectop.utils import safe_call_app
 
 
 class MainContent(Vertical):
@@ -36,6 +39,18 @@ class MainContent(Vertical):
         The size of the log content at the last update.
     """
 
+    is_live: reactive[bool] = reactive(False, init=False)
+    """Whether live log updates are enabled."""
+
+    log_content: reactive[str] = reactive("", init=False)
+    """The content of the output log."""
+
+    script_content: reactive[str] = reactive("", init=False)
+    """The content of the script."""
+
+    job_content: reactive[str] = reactive("", init=False)
+    """The content of the job file."""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """
         Initialize the MainContent widget.
@@ -48,7 +63,6 @@ class MainContent(Vertical):
             Keyword arguments for Vertical.
         """
         super().__init__(*args, **kwargs)
-        self.is_live: bool = False
         self.last_log_size: int = 0
         self._content_cache: dict[str, str] = {}
 
@@ -96,6 +110,54 @@ class MainContent(Vertical):
         """
         self.query_one("#content_tabs", TabbedContent).active = value
 
+    def watch_log_content(self, content: str) -> None:
+        """
+        Watch for changes in log content and update the widget.
+
+        Parameters
+        ----------
+        content : str
+            The new log content.
+        """
+        widget = self.query_one("#log_output", RichLog)
+        self._content_cache["output"] = content
+        # Check if this is an append or a full refresh.
+        # Simple heuristic: if content starts with old content, it might be an append.
+        # But for robustness, we just clear and rewrite unless specifically asked.
+        # Since reactive doesn't easily support 'append' flag, we'll keep update_log
+        # for append operations but use reactive for full updates.
+        widget.clear()
+        self.last_log_size = len(content)
+        widget.write(content)
+
+    def watch_script_content(self, content: str) -> None:
+        """
+        Watch for changes in script content and update the widget.
+
+        Parameters
+        ----------
+        content : str
+            The new script content.
+        """
+        self._content_cache["script"] = content
+        widget = self.query_one("#view_script", Static)
+        syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
+        widget.update(syntax)
+
+    def watch_job_content(self, content: str) -> None:
+        """
+        Watch for changes in job content and update the widget.
+
+        Parameters
+        ----------
+        content : str
+            The new job content.
+        """
+        self._content_cache["job"] = content
+        widget = self.query_one("#view_job", Static)
+        syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
+        widget.update(syntax)
+
     def update_log(self, content: str, append: bool = False) -> None:
         """
         Update the Output log tab.
@@ -107,13 +169,11 @@ class MainContent(Vertical):
         append : bool, optional
             Whether to append to existing content, by default False.
         """
-        widget = self.query_one("#log_output", RichLog)
-        self._content_cache["output"] = content
         if not append:
-            widget.clear()
-            self.last_log_size = len(content)
-            widget.write(content)
+            self.log_content = content
         else:
+            widget = self.query_one("#log_output", RichLog)
+            self._content_cache["output"] = content
             new_content = content[self.last_log_size :]
             if new_content:
                 widget.write(new_content)
@@ -121,31 +181,25 @@ class MainContent(Vertical):
 
     def update_script(self, content: str) -> None:
         """
-        Update the Script tab with syntax highlighting.
+        Update the Script tab.
 
         Parameters
         ----------
         content : str
             The script content.
         """
-        self._content_cache["script"] = content
-        widget = self.query_one("#view_script", Static)
-        syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
-        widget.update(syntax)
+        self.script_content = content
 
     def update_job(self, content: str) -> None:
         """
-        Update the Job tab with syntax highlighting.
+        Update the Job tab.
 
         Parameters
         ----------
         content : str
             The job content.
         """
-        self._content_cache["job"] = content
-        widget = self.query_one("#view_job", Static)
-        syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
-        widget.update(syntax)
+        self.job_content = content
 
     def action_search(self) -> None:
         """
@@ -195,11 +249,27 @@ class MainContent(Vertical):
                 label = "Job"
 
             content = self._content_cache.get(cache_key, "")
-            matches = content.lower().count(query.lower())
-            if matches > 0:
-                self.app.notify(f"Found {matches} matches for '{query}' in {label}", severity="information")
-            else:
-                self.app.notify(f"No matches found for '{query}' in {label}", severity="warning")
+            self._run_search_worker(query, content, label)
+
+    @work(thread=True)
+    def _run_search_worker(self, query: str, content: str, label: str) -> None:
+        """
+        Run the search in a background worker.
+
+        Parameters
+        ----------
+        query : str
+            The search query.
+        content : str
+            The content to search.
+        label : str
+            The label of the content being searched.
+        """
+        matches = content.lower().count(query.lower())
+        if matches > 0:
+            safe_call_app(self.app, self.app.notify, f"Found {matches} matches for '{query}' in {label}", severity="information")
+        else:
+            safe_call_app(self.app, self.app.notify, f"No matches found for '{query}' in {label}", severity="warning")
 
     def show_error(self, widget_id: str, message: str) -> None:
         """

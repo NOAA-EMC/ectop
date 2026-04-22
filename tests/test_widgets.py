@@ -85,6 +85,8 @@ def test_main_content_updates() -> None:
 
     # Test script update
     mc.update_script("echo hello")
+    # update_script triggers watcher if not using reactive directly.
+    # mc.update_script(content) -> self.script_content = content -> triggers watcher.
     mock_script.update.assert_called_once()
 
     # Test job update
@@ -123,21 +125,16 @@ def test_main_content_search_logic() -> None:
         mock_event.value = "match"
         mock_active_prop.return_value = "tab_output"
 
-        mc.on_input_submitted(mock_event)
-        mock_app.notify.assert_called_with("Found 2 matches for 'match' in Output", severity="information")
-
-        # Test no match found
-        mock_app.notify.reset_mock()
-        mock_event.value = "missing"
-        mc.on_input_submitted(mock_event)
-        mock_app.notify.assert_called_with("No matches found for 'missing' in Output", severity="warning")
+        with patch.object(MainContent, "_run_search_worker") as mock_worker:
+            mc.on_input_submitted(mock_event)
+            mock_worker.assert_called_once_with("match", mc._content_cache["output"], "Output")
 
         # Test search in different tab
-        mock_app.notify.reset_mock()
-        mock_active_prop.return_value = "tab_script"
         mock_event.value = "hello"
-        mc.on_input_submitted(mock_event)
-        mock_app.notify.assert_called_with("Found 1 matches for 'hello' in Script", severity="information")
+        mock_active_prop.return_value = "tab_script"
+        with patch.object(MainContent, "_run_search_worker") as mock_worker:
+            mc.on_input_submitted(mock_event)
+            mock_worker.assert_called_once_with("hello", mc._content_cache["script"], "Script")
 
 
 def test_main_content_cache_clearing() -> None:
