@@ -14,10 +14,8 @@ import pytest
 
 from ectop.constants import (
     EXPR_AND_LABEL,
-    ICON_MET,
-    ICON_NOT_MET,
 )
-from ectop.widgets.modals.why import WhyInspector
+from ectop.widgets.modals.why import DepData, WhyInspector
 
 
 @pytest.fixture
@@ -47,61 +45,43 @@ def mock_defs() -> MagicMock:
 def test_parse_complex_path(mock_client, mock_defs):
     """Test parsing paths with special characters like - and ."""
     inspector = WhyInspector("/dummy", mock_client)
-    parent = MagicMock()
+    parent = DepData("Parent")
 
-    inspector._parse_expression(parent, "/suite/test-node.1 == complete", mock_defs)
+    inspector._parse_expression_data(parent, "/suite/test-node.1 == complete", mock_defs)
 
     # Check that it matched correctly
-    parent.add.assert_called_once()
-    label = parent.add.call_args[0][0]
-    assert ICON_MET in label
-    assert "/suite/test-node.1" in label
-    assert "complete" in label
+    assert len(parent.children) == 1
+    child = parent.children[0]
+    assert "/suite/test-node.1" in child.label
+    assert "complete" in child.label
+    assert child.is_met is True
 
 
 def test_parse_aborted_highlighting(mock_client, mock_defs):
     """Test that aborted nodes get special highlighting."""
     inspector = WhyInspector("/dummy", mock_client)
-    parent = MagicMock()
+    parent = DepData("Parent")
 
-    inspector._parse_expression(parent, "/suite/aborted_node == complete", mock_defs)
+    inspector._parse_expression_data(parent, "/suite/aborted_node == complete", mock_defs)
 
-    parent.add.assert_called_once()
-    label = parent.add.call_args[0][0]
-    assert ICON_NOT_MET in label
-    assert "aborted" in label
-    assert "STOPPED HERE" in label
-    assert "[b red]" in label
+    assert len(parent.children) == 1
+    child = parent.children[0]
+    assert "aborted" in child.label
+    assert "STOPPED HERE" in child.label
+    assert "[b red]" in child.label
+    assert child.is_met is False
 
 
 def test_parse_nested_and_or(mock_client, mock_defs):
     """Test deeply nested AND/OR logic."""
     inspector = WhyInspector("/dummy", mock_client)
-    parent = MagicMock()
-
-    # Mock add to return a new mock for child nodes
-    def side_effect(label, **kwargs):
-        m = MagicMock()
-        m.label = label
-        return m
-
-    parent.add.side_effect = side_effect
+    parent = DepData("Parent")
 
     expr = "(/suite/test-node.1 == complete) and ((/suite/other_node == active) or (/suite/aborted_node == complete))"
-    inspector._parse_expression(parent, expr, mock_defs)
+    inspector._parse_expression_data(parent, expr, mock_defs)
 
     # Verify top-level AND
-    parent.add.assert_any_call(EXPR_AND_LABEL, expand=True)
-
-    # Better way: just check all calls on parent and its "children"
-    # Actually, since we didn't capture the return values easily, let's just
-    # check that add was called with expected labels.
-    all_labels = [call[0][0] for call in parent.add.call_args_list]
-    assert EXPR_AND_LABEL in all_labels
-
-    # The parser is recursive and calls .add() on the returned node.
-    # Since we mocked side_effect to return a new MagicMock, we should see calls on those.
-    # But for a simple test, checking top levels is often enough if we trust recursion.
+    assert any(child.label == EXPR_AND_LABEL for child in parent.children)
 
 
 def test_parse_various_operators(mock_client, mock_defs):
@@ -110,83 +90,88 @@ def test_parse_various_operators(mock_client, mock_defs):
 
     operators = ["==", "!=", "<", ">", "<=", ">="]
     for op in operators:
-        parent = MagicMock()
-        inspector._parse_expression(parent, f"/suite/other_node {op} complete", mock_defs)
-        parent.add.assert_called_once()
-        label = parent.add.call_args[0][0]
-        assert f" {op} " in label
+        parent = DepData("Parent")
+        inspector._parse_expression_data(parent, f"/suite/other_node {op} complete", mock_defs)
+        assert len(parent.children) == 1
+        child = parent.children[0]
+        assert f" {op} " in child.label
 
 
 def test_parse_not_operator(mock_client, mock_defs):
     """Test the NOT operator handling in expressions."""
     inspector = WhyInspector("/dummy", mock_client)
-    parent = MagicMock()
+    parent = DepData("Parent")
 
-    # Mock add to return a child mock
-    child = MagicMock()
-    parent.add.return_value = child
-
-    inspector._parse_expression(parent, "! (/suite/other_node == complete)", mock_defs)
+    inspector._parse_expression_data(parent, "! (/suite/other_node == complete)", mock_defs)
 
     # Check top-level NOT node
-    # Since we updated the label after adding, we check the final label if possible,
-    # but here we just check add() was called.
-    parent.add.assert_any_call("NOT (Must be false)", expand=True)
+    assert any("NOT (Must be false)" in child.label for child in parent.children)
+    not_node = next(child for child in parent.children if "NOT (Must be false)" in child.label)
 
     # Check that it recursed to the child
-    child.add.assert_called_once()
-    label = child.add.call_args[0][0]
+    assert len(not_node.children) == 1
+    inner = not_node.children[0]
     # Inner expression is /suite/other_node == complete.
     # other_node is active. active == complete is False.
-    assert ICON_NOT_MET in label
-    assert "/suite/other_node" in label
+    assert "/suite/other_node" in inner.label
+    assert inner.is_met is False
+    assert not_node.is_met is True  # NOT (False) is True
 
 
 def test_parse_leaf_negation(mock_client, mock_defs):
     """Test negation prefix directly on a leaf node."""
     inspector = WhyInspector("/dummy", mock_client)
-    parent = MagicMock()
+    parent = DepData("Parent")
 
     # ! /suite/test-node.1 == complete -> /suite/test-node.1 is complete.
     # complete == complete is True. ! (True) is False.
-    inspector._parse_expression(parent, "!/suite/test-node.1 == complete", mock_defs)
+    inspector._parse_expression_data(parent, "!/suite/test-node.1 == complete", mock_defs)
 
     # Now "!/suite/..." starts with "!", so it hits the NOT block first.
-    parent.add.assert_any_call("NOT (Must be false)", expand=True)
+    assert any("NOT (Must be false)" in child.label for child in parent.children)
 
 
-def test_add_limit_deps(mock_client):
-    """Test _add_limit_deps logic."""
+def test_gather_dependency_data_limits(mock_client):
+    """Test gathering dependency data including limits."""
     inspector = WhyInspector("/dummy", mock_client)
-    parent = MagicMock()
     mock_node = MagicMock()
 
     limit = MagicMock()
     limit.name.return_value = "max_jobs"
     limit.value.return_value = "/limits"
     mock_node.inlimits = [limit]
+    mock_node.get_why.return_value = ""
+    mock_node.get_trigger.return_value = None
+    mock_node.get_complete.return_value = None
+    mock_node.get_times.return_value = []
+    mock_node.get_dates.return_value = []
+    mock_node.get_crons.return_value = []
 
-    inspector._add_limit_deps(parent, mock_node)
+    dep_data = inspector._gather_dependency_data(mock_node, MagicMock())
 
     # Check "Limits" header added
-    parent.add.assert_any_call("Limits")
-    # Header node should have child added
-    limit_header_node = parent.add.return_value
-    limit_header_node.add.assert_called_with("🔒 Limit: max_jobs (Path: /limits)")
+    assert any(child.label == "Limits" for child in dep_data.children)
+    limit_root = next(child for child in dep_data.children if child.label == "Limits")
+    assert any("Limit: max_jobs (Path: /limits)" in child.label for child in limit_root.children)
 
 
-def test_add_time_deps(mock_client):
-    """Test _add_time_deps logic."""
+def test_gather_dependency_data_times(mock_client):
+    """Test gathering dependency data including times."""
     inspector = WhyInspector("/dummy", mock_client)
-    parent = MagicMock()
     mock_node = MagicMock()
 
+    mock_node.get_why.return_value = ""
+    mock_node.get_trigger.return_value = None
+    mock_node.get_complete.return_value = None
+    mock_node.inlimits = []
     mock_node.get_times.return_value = ["10:00"]
     mock_node.get_dates.return_value = ["01.01.2024"]
     mock_node.get_crons.return_value = ["0 10 * * *"]
 
-    inspector._add_time_deps(parent, mock_node)
+    dep_data = inspector._gather_dependency_data(mock_node, MagicMock())
 
-    parent.add.assert_any_call("⏳ Time: 10:00")
-    parent.add.assert_any_call("📅 Date: 01.01.2024")
-    parent.add.assert_any_call("⏰ Cron: 0 10 * * *")
+    assert any(child.label == "Time Dependencies" for child in dep_data.children)
+    time_root = next(child for child in dep_data.children if child.label == "Time Dependencies")
+    assert any("Time: 10:00" in child.label for child in time_root.children)
+    assert any("Date: 01.01.2024" in child.label for child in time_root.children)
+    assert any("Cron: 0 10 * * *" in child.label for child in time_root.children)
