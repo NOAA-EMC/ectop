@@ -2,7 +2,7 @@
 # WARNING: If you modify features, API, or usage, you MUST update the
 # documentation immediately.
 # #############################################################################
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 from textual.widgets import RichLog, Static
 
@@ -98,3 +98,60 @@ def test_main_content_updates() -> None:
     # Test show error on RichLog
     mc.show_error("#log_output", "Log error")
     mock_log.write.assert_called_with("[italic red]Log error[/]")
+
+
+def test_main_content_search_logic() -> None:
+    """Test the search match feedback logic in MainContent."""
+    mc = MainContent()
+    # Use patch.object with PropertyMock for app and active
+    with (
+        patch.object(MainContent, "app", new_callable=PropertyMock) as mock_app_prop,
+        patch.object(MainContent, "active", new_callable=PropertyMock) as mock_active_prop,
+    ):
+        mock_app = MagicMock()
+        mock_app_prop.return_value = mock_app
+
+        mc._content_cache = {
+            "output": "line 1\nline 2 with match\nline 3 with match",
+            "script": "echo hello",
+            "job": "echo job",
+        }
+
+        # Test match found
+        mock_event = MagicMock()
+        mock_event.input.id = "content_search"
+        mock_event.value = "match"
+        mock_active_prop.return_value = "tab_output"
+
+        mc.on_input_submitted(mock_event)
+        mock_app.notify.assert_called_with("Found 2 matches for 'match' in Output", severity="information")
+
+        # Test no match found
+        mock_app.notify.reset_mock()
+        mock_event.value = "missing"
+        mc.on_input_submitted(mock_event)
+        mock_app.notify.assert_called_with("No matches found for 'missing' in Output", severity="warning")
+
+        # Test search in different tab
+        mock_app.notify.reset_mock()
+        mock_active_prop.return_value = "tab_script"
+        mock_event.value = "hello"
+        mc.on_input_submitted(mock_event)
+        mock_app.notify.assert_called_with("Found 1 matches for 'hello' in Script", severity="information")
+
+
+def test_main_content_cache_clearing() -> None:
+    """Test that cache is cleared when show_error is called."""
+    mc = MainContent()
+    mc.query_one = MagicMock()
+    mc._content_cache = {"output": "some logs", "script": "some script", "job": "some job"}
+
+    mc.show_error("#log_output", "error")
+    assert mc._content_cache["output"] == ""
+    assert mc._content_cache["script"] == "some script"
+
+    mc.show_error("#view_script", "error")
+    assert mc._content_cache["script"] == ""
+
+    mc.show_error("#view_job", "error")
+    assert mc._content_cache["job"] == ""

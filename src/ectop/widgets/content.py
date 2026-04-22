@@ -18,7 +18,7 @@ from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Input, RichLog, Static, TabbedContent, TabPane
 
-from ectop.constants import SYNTAX_THEME
+from ectop.constants import DEFAULT_SHELL, SYNTAX_THEME
 
 
 class MainContent(Vertical):
@@ -130,7 +130,7 @@ class MainContent(Vertical):
         """
         self._content_cache["script"] = content
         widget = self.query_one("#view_script", Static)
-        syntax = Syntax(content, "bash", theme=SYNTAX_THEME, line_numbers=True)
+        syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
         widget.update(syntax)
 
     def update_job(self, content: str) -> None:
@@ -144,7 +144,7 @@ class MainContent(Vertical):
         """
         self._content_cache["job"] = content
         widget = self.query_one("#view_job", Static)
-        syntax = Syntax(content, "bash", theme=SYNTAX_THEME, line_numbers=True)
+        syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
         widget.update(syntax)
 
     def action_search(self) -> None:
@@ -186,18 +186,24 @@ class MainContent(Vertical):
 
             active_tab = self.active
             cache_key = "output"
+            label = "Output"
             if active_tab == "tab_script":
                 cache_key = "script"
+                label = "Script"
             elif active_tab == "tab_job":
                 cache_key = "job"
+                label = "Job"
 
             content = self._content_cache.get(cache_key, "")
             matches = content.lower().count(query.lower())
-            self.app.notify(f"Found {matches} matches for '{query}' in {cache_key}")
+            if matches > 0:
+                self.app.notify(f"Found {matches} matches for '{query}' in {label}", severity="information")
+            else:
+                self.app.notify(f"No matches found for '{query}' in {label}", severity="warning")
 
     def show_error(self, widget_id: str, message: str) -> None:
         """
-        Display an error message in a specific widget.
+        Display an error message in a specific widget and clear cache.
 
         Parameters
         ----------
@@ -206,6 +212,17 @@ class MainContent(Vertical):
         message : str
             The error message to display.
         """
+        cache_key = None
+        if widget_id == "#log_output":
+            cache_key = "output"
+        elif widget_id == "#view_script":
+            cache_key = "script"
+        elif widget_id == "#view_job":
+            cache_key = "job"
+
+        if cache_key:
+            self._content_cache[cache_key] = ""
+
         widget = self.query_one(widget_id)
         if isinstance(widget, RichLog):
             widget.write(f"[italic red]{message}[/]")

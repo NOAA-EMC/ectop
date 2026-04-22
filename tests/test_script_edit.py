@@ -62,9 +62,11 @@ async def test_action_edit_script_success(mock_app: Ectop) -> None:
 
     mock_app.ecflow_client.file.return_value = old_content
 
-    with patch.object(mock_app, "get_selected_path", return_value=node_path), patch(
-        "tempfile.NamedTemporaryFile"
-    ) as mock_temp, patch.object(mock_app, "_run_editor") as mock_run_editor:
+    with (
+        patch.object(mock_app, "get_selected_path", return_value=node_path),
+        patch("tempfile.NamedTemporaryFile") as mock_temp,
+        patch.object(mock_app, "_run_editor") as mock_run_editor,
+    ):
         # Setup mock temp file
         mock_file = MagicMock()
         mock_temp.return_value.__enter__.return_value = mock_file
@@ -92,9 +94,12 @@ async def test_finish_edit_updates_server(mock_app: Ectop) -> None:
     new_content = "new content"
     temp_path = "/tmp/fake.ecf"
 
-    with patch("builtins.open", mock_open(read_data=new_content)), patch("os.path.exists", return_value=True), patch(
-        "os.unlink"
-    ) as mock_unlink, patch.object(mock_app, "_prompt_requeue") as mock_prompt:
+    with (
+        patch("builtins.open", mock_open(read_data=new_content)),
+        patch("os.path.exists", return_value=True),
+        patch("os.unlink") as mock_unlink,
+        patch.object(mock_app, "_prompt_requeue") as mock_prompt,
+    ):
         mock_app._finish_edit(temp_path, node_path, old_content)
 
         mock_app.ecflow_client.alter.assert_called_with(node_path, "change", "script", new_content)
@@ -116,9 +121,12 @@ async def test_finish_edit_no_change(mock_app: Ectop) -> None:
     content = "same content"
     temp_path = "/tmp/fake.ecf"
 
-    with patch("builtins.open", mock_open(read_data=content)), patch("os.path.exists", return_value=True), patch(
-        "os.unlink"
-    ), patch.object(mock_app, "notify") as mock_notify:
+    with (
+        patch("builtins.open", mock_open(read_data=content)),
+        patch("os.path.exists", return_value=True),
+        patch("os.unlink"),
+        patch.object(mock_app, "notify") as mock_notify,
+    ):
         mock_app._finish_edit(temp_path, node_path, content)
 
         mock_app.ecflow_client.alter.assert_not_called()

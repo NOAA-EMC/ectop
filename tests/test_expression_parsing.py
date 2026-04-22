@@ -153,3 +153,40 @@ def test_parse_leaf_negation(mock_client, mock_defs):
 
     # Now "!/suite/..." starts with "!", so it hits the NOT block first.
     parent.add.assert_any_call("NOT (Must be false)", expand=True)
+
+
+def test_add_limit_deps(mock_client):
+    """Test _add_limit_deps logic."""
+    inspector = WhyInspector("/dummy", mock_client)
+    parent = MagicMock()
+    mock_node = MagicMock()
+
+    limit = MagicMock()
+    limit.name.return_value = "max_jobs"
+    limit.value.return_value = "/limits"
+    mock_node.inlimits = [limit]
+
+    inspector._add_limit_deps(parent, mock_node)
+
+    # Check "Limits" header added
+    parent.add.assert_any_call("Limits")
+    # Header node should have child added
+    limit_header_node = parent.add.return_value
+    limit_header_node.add.assert_called_with("🔒 Limit: max_jobs (Path: /limits)")
+
+
+def test_add_time_deps(mock_client):
+    """Test _add_time_deps logic."""
+    inspector = WhyInspector("/dummy", mock_client)
+    parent = MagicMock()
+    mock_node = MagicMock()
+
+    mock_node.get_times.return_value = ["10:00"]
+    mock_node.get_dates.return_value = ["01.01.2024"]
+    mock_node.get_crons.return_value = ["0 10 * * *"]
+
+    inspector._add_time_deps(parent, mock_node)
+
+    parent.add.assert_any_call("⏳ Time: 10:00")
+    parent.add.assert_any_call("📅 Date: 01.01.2024")
+    parent.add.assert_any_call("⏰ Cron: 0 10 * * *")
