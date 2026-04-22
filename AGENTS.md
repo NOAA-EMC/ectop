@@ -26,7 +26,7 @@ Proactively explore the codebase to identify technical debt, missing features, a
 4. **Propose Action**: State issue, propose plan, wait for approval.
 
 ## Strict Coding Standards
-- **Testing**: Mandatory corresponding pytest unit test for all new code.
+- **Testing**: Mandatory corresponding pytest unit test for all new code. Do not mock ecflow; use a real ecFlow installation for tests.
 - **Documentation**: NumPy-style docstrings (Parameters, Returns, Raises, Notes).
 - **Maintenance Warnings**: Every modified file must include: "If you modify features, API, or usage, you MUST update the documentation immediately."
 - **Type Safety**: Modern Python type hints (`str | None`, `list[str]`).

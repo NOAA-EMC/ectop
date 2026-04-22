@@ -212,3 +212,5 @@ examples/ectop_demo_home/
 #eclow specific
 *.ecf.check
 *.ecf.check.*
+miniforge.sh
+miniforge3/

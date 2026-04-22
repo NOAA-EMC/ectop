@@ -14,11 +14,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
-from textual.widgets.tree import TreeNode
 
 from ectop.app import Ectop
 from ectop.constants import EXPR_AND_LABEL, EXPR_OR_LABEL
-from ectop.widgets.modals.why import WhyInspector
+from ectop.widgets.modals.why import DepData, WhyInspector
 from ectop.widgets.sidebar import SuiteTree
 
 
@@ -66,7 +65,7 @@ def test_why_inspector_nested_parsing() -> None:
     mock_client = MagicMock()
     inspector = WhyInspector("/path", mock_client)
 
-    parent_node = MagicMock(spec=TreeNode)
+    parent_data = DepData("Parent")
     defs = MagicMock()
 
     # Mock nodes
@@ -80,26 +79,13 @@ def test_why_inspector_nested_parsing() -> None:
     # Complex expression: (a == complete or b == complete) and (a != aborted)
     expr = "((/a == complete) or (/b == complete)) and (/a != aborted)"
 
-    # We need to mock the return value of add to track hierarchy
-    and_node = MagicMock(spec=TreeNode)
-    or_node = MagicMock(spec=TreeNode)
-
-    def side_effect(label, **kwargs):
-        if label == EXPR_AND_LABEL:
-            return and_node
-        if label == EXPR_OR_LABEL:
-            return or_node
-        return MagicMock(spec=TreeNode)
-
-    parent_node.add.side_effect = side_effect
-    and_node.add.side_effect = side_effect
-
-    inspector._parse_expression(parent_node, expr, defs)
+    inspector._parse_expression_data(parent_data, expr, defs)
 
     # Check that AND was added at top level
-    parent_node.add.assert_any_call(EXPR_AND_LABEL, expand=True)
+    assert any(child.label == EXPR_AND_LABEL for child in parent_data.children)
+    and_node = next(child for child in parent_data.children if child.label == EXPR_AND_LABEL)
     # Check that OR was added under AND
-    and_node.add.assert_any_call(EXPR_OR_LABEL, expand=True)
+    assert any(child.label == EXPR_OR_LABEL for child in and_node.children)
 
 
 @pytest.mark.asyncio
