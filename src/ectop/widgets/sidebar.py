@@ -11,13 +11,13 @@ Sidebar widget for the ecFlow suite tree.
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
 import ecflow
 from rich.text import Text
 from textual import work
+from textual.reactive import reactive
 from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
@@ -30,6 +30,7 @@ from ectop.constants import (
     STATE_MAP,
     TREE_FILTERS,
 )
+from ectop.utils import safe_call_app
 
 if TYPE_CHECKING:
     from ecflow import Defs, Node
@@ -42,6 +43,12 @@ class SuiteTree(Tree[str]):
     .. note::
         If you modify features, API, or usage, you MUST update the documentation immediately.
     """
+
+    current_filter: reactive[str | None] = reactive(None, init=False)
+    """The current status filter applied to the tree."""
+
+    defs: reactive[Defs | None] = reactive(None, init=False)
+    """The ecFlow definitions to display."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """
@@ -59,15 +66,14 @@ class SuiteTree(Tree[str]):
         None
         """
         super().__init__(*args, **kwargs)
-        self.defs: Defs | None = None
-        self.current_filter: str | None = None
         self.filters: list[str | None] = TREE_FILTERS
         self.host: str = ""
         self.port: int = 0
+        self._all_paths_cache: list[str] | None = None
 
     def update_tree(self, client_host: str, client_port: int, defs: Defs | None) -> None:
         """
-        Rebuild the tree from ecFlow definitions using lazy loading.
+        Update the tree data.
 
         Parameters
         ----------
@@ -84,19 +90,46 @@ class SuiteTree(Tree[str]):
 
         Notes
         -----
-        This method is typically called from the main thread after a sync.
+        This method triggers the reactive watchers.
         """
         self.host = client_host
         self.port = client_port
         self.defs = defs
-        self._all_paths_cache: list[str] | None = None
+
+    def watch_defs(self, new_defs: Defs | None) -> None:
+        """
+        Watch for changes in definitions and rebuild the tree.
+
+        Parameters
+        ----------
+        new_defs : ecflow.Defs | None
+            The new ecFlow definitions.
+        """
+        self._rebuild_tree()
+
+    def watch_current_filter(self, new_filter: str | None) -> None:
+        """
+        Watch for changes in the current filter and rebuild the tree.
+
+        Parameters
+        ----------
+        new_filter : str | None
+            The new filter value.
+        """
+        self._rebuild_tree()
+
+    def _rebuild_tree(self) -> None:
+        """
+        Rebuild the tree from ecFlow definitions using lazy loading.
+        """
+        self._all_paths_cache = None
         self.clear()
-        if not defs:
+        if not self.defs:
             self.root.label = "Server Empty"
             return
 
         filter_str = f" [Filter: {self.current_filter}]" if self.current_filter else ""
-        self.root.label = f"{ICON_SERVER} {client_host}:{client_port}{filter_str}"
+        self.root.label = f"{ICON_SERVER} {self.host}:{self.port}{filter_str}"
 
         # Start background worker for tree population to avoid blocking UI
         self._populate_tree_worker()
@@ -186,10 +219,6 @@ class SuiteTree(Tree[str]):
         next_idx = (current_idx + 1) % len(self.filters)
         self.current_filter = self.filters[next_idx]
 
-        # We need to refresh the tree from local defs
-        if self.defs:
-            self.update_tree(self.host, self.port, self.defs)
-
         self.app.notify(f"Filter: {self.current_filter or 'All'}")
 
     def _add_node_to_ui(self, parent_ui_node: TreeNode[str], ecflow_node: ecflow.Node) -> TreeNode[str]:
@@ -211,7 +240,7 @@ class SuiteTree(Tree[str]):
         state = str(ecflow_node.get_state())
         icon = STATE_MAP.get(state, ICON_UNKNOWN_STATE)
 
-        is_container = isinstance(ecflow_node, (ecflow.Family, ecflow.Suite))
+        is_container = isinstance(ecflow_node, ecflow.Family | ecflow.Suite)
         type_icon = ICON_FAMILY if is_container else ICON_TASK
 
         label = Text(f"{icon} {type_icon} {ecflow_node.name()} ")
@@ -416,15 +445,11 @@ class SuiteTree(Tree[str]):
             The result of the call if synchronous, or None if scheduled.
         """
         try:
-            # Check if we are on the main thread.
-            # Using private access as Textual doesn't provide a public way yet.
-            if self.app._thread_id == threading.get_ident():
-                return callback(*args, **kwargs)
-        except (AttributeError, RuntimeError):
+            return safe_call_app(self.app, callback, *args, **kwargs)
+        except (AttributeError, RuntimeError, Exception):
             # App might not be fully initialized in some tests
-            pass
-
-        return self.app.call_from_thread(callback, *args, **kwargs)
+            # Fallback to direct call if app is not available
+            return callback(*args, **kwargs)
 
     @work(thread=True)
     def select_by_path(self, path: str) -> None:

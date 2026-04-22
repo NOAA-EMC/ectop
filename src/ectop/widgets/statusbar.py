@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any
 
 from rich.text import Text
+from textual.reactive import reactive
 from textual.widgets import Static
 
 from ectop.constants import COLOR_STATUS_HALTED
@@ -28,6 +29,18 @@ class StatusBar(Static):
         If you modify features, API, or usage, you MUST update the documentation immediately.
     """
 
+    server_info: reactive[str] = reactive("Disconnected")
+    """The host:port string of the ecFlow server."""
+
+    last_sync: reactive[str] = reactive("Never")
+    """The timestamp of the last successful synchronization."""
+
+    status: reactive[str] = reactive("Unknown")
+    """The current status of the ecFlow server."""
+
+    server_version: reactive[str] = reactive("Unknown")
+    """The version of the ecFlow server."""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """
         Initialize the StatusBar.
@@ -40,10 +53,6 @@ class StatusBar(Static):
             Keyword arguments for the Static widget.
         """
         super().__init__(*args, **kwargs)
-        self.server_info: str = "Disconnected"
-        self.last_sync: str = "Never"
-        self.status: str = "Unknown"
-        self.server_version: str = "Unknown"
 
     def update_status(self, host: str, port: int, status: str = "Connected", version: str = "Unknown") -> None:
         """
@@ -64,11 +73,6 @@ class StatusBar(Static):
         self.status = str(status)
         self.server_version = str(version)
         self.last_sync = datetime.now().strftime("%H:%M:%S")
-        self._refresh_content()
-
-    def _refresh_content(self) -> None:
-        """Refresh the rendered content of the status bar."""
-        self.refresh()
 
     def render(self) -> Text:
         """
