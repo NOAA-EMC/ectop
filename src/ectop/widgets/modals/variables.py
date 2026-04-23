@@ -46,16 +46,9 @@ class VariableTweaker(ModalScreen[None]):
         """
         Initialize the VariableTweaker.
 
-        Parameters
-        ----------
-        node_path : str
-            The absolute path to the ecFlow node.
-        client : EcflowClient
-            The ecFlow client instance.
-
-        Returns
-        -------
-        None
+        Args:
+            node_path: The absolute path to the ecFlow node.
+            client: The ecFlow client instance.
         """
         super().__init__()
         self.node_path: str = node_path
@@ -66,9 +59,7 @@ class VariableTweaker(ModalScreen[None]):
         """
         Compose the modal UI.
 
-        Returns
-        -------
-        ComposeResult
+        Returns:
             The UI components for the modal.
         """
         with Vertical(id="var_container"):
@@ -81,10 +72,6 @@ class VariableTweaker(ModalScreen[None]):
     def on_mount(self) -> None:
         """
         Handle the mount event to initialize the table.
-
-        Returns
-        -------
-        None
         """
         table = self.query_one("#var_table", DataTable)
         table.add_columns("Name", "Value", "Type")
@@ -95,10 +82,6 @@ class VariableTweaker(ModalScreen[None]):
     def action_close(self) -> None:
         """
         Close the modal.
-
-        Returns
-        -------
-        None
         """
         self.app.pop_screen()
 
@@ -106,59 +89,41 @@ class VariableTweaker(ModalScreen[None]):
         """
         Handle button press events.
 
-        Parameters
-        ----------
-        event : Button.Pressed
-            The button press event.
-
-        Returns
-        -------
-        None
+        Args:
+            event: The button press event.
         """
         if event.button.id == "close_btn":
             self.app.pop_screen()
 
-    @work(thread=True)
-    def refresh_vars(self) -> None:
+    @work
+    async def refresh_vars(self) -> None:
         """
         Fetch variables from the server and refresh the table in a background worker.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs blocking I/O.
+        Notes:
+            This is an async background worker.
         """
-        self._refresh_vars_logic()
+        await self._refresh_vars_logic()
 
-    def _refresh_vars_logic(self) -> None:
+    async def _refresh_vars_logic(self) -> None:
         """
         The actual logic for fetching variables and updating the UI.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If server synchronization fails.
 
-        Raises
-        ------
-        RuntimeError
-            If server synchronization fails.
-
-        Notes
-        -----
-        This method can be called directly for testing.
+        Notes:
+            This method can be called directly for testing.
         """
         try:
-            self.client.sync_local()
-            defs = self.client.get_defs()
+            await self.client.sync_local()
+            defs = await self.client.get_defs()
             if not defs:
                 return
             node = defs.find_abs_node(self.node_path)
 
             if not node:
-                self.app.call_from_thread(self.app.notify, "Node not found", severity="error")
+                self.app.notify("Node not found", severity="error")
                 return
 
             rows: list[tuple[str, str, str, str]] = []
@@ -191,25 +156,19 @@ class VariableTweaker(ModalScreen[None]):
                         seen_vars.add(var.name())
                 parent = parent.get_parent()
 
-            self.app.call_from_thread(self._update_table, rows)
+            self._update_table(rows)
 
         except RuntimeError as e:
-            self.app.call_from_thread(self.app.notify, f"Error fetching variables: {e}", severity="error")
+            self.app.notify(f"Error fetching variables: {e}", severity="error")
         except Exception as e:
-            self.app.call_from_thread(self.app.notify, f"Unexpected Error: {e}", severity="error")
+            self.app.notify(f"Unexpected Error: {e}", severity="error")
 
     def _update_table(self, rows: list[tuple[str, str, str, str]]) -> None:
         """
         Update the DataTable with new rows.
 
-        Parameters
-        ----------
-        rows : list[tuple[str, str, str, str]]
-            The rows to add to the table.
-
-        Returns
-        -------
-        None
+        Args:
+            rows: The rows to add to the table.
         """
         table = self.query_one("#var_table", DataTable)
         table.clear()
@@ -220,14 +179,8 @@ class VariableTweaker(ModalScreen[None]):
         """
         Handle row selection to start editing a variable.
 
-        Parameters
-        ----------
-        event : DataTable.RowSelected
-            The row selection event.
-
-        Returns
-        -------
-        None
+        Args:
+            event: The row selection event.
         """
         row_key = event.row_key.value
         if row_key and row_key.startswith(INHERITED_VAR_PREFIX):
@@ -243,89 +196,63 @@ class VariableTweaker(ModalScreen[None]):
         """
         Handle variable submission (add or update).
 
-        Parameters
-        ----------
-        event : Input.Submitted
-            The input submission event.
-
-        Returns
-        -------
-        None
+        Args:
+            event: The input submission event.
         """
         if event.input.id == "var_input":
             self._submit_variable_worker(event.value)
 
-    @work(thread=True)
-    def _submit_variable_worker(self, value: str) -> None:
+    @work
+    async def _submit_variable_worker(self, value: str) -> None:
         """
         Worker to submit a new or updated variable in a background thread.
 
-        Parameters
-        ----------
-        value : str
-            The new value or 'name=value' string.
+        Args:
+            value: The new value or 'name=value' string.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs blocking I/O.
+        Notes:
+            This is an async background worker.
         """
-        self._submit_variable_logic(value)
+        await self._submit_variable_logic(value)
 
-    def _submit_variable_logic(self, value: str) -> None:
+    async def _submit_variable_logic(self, value: str) -> None:
         """
         The actual logic for submitting a variable update or addition.
 
-        Parameters
-        ----------
-        value : str
-            The new value or 'name=value' string.
+        Args:
+            value: The new value or 'name=value' string.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the server alteration fails.
 
-        Raises
-        ------
-        RuntimeError
-            If the server alteration fails.
-
-        Notes
-        -----
-        This method can be called directly for testing.
+        Notes:
+            This method can be called directly for testing.
         """
         try:
             if self.selected_var_name:
                 # Editing existing
-                self.client.alter(self.node_path, "add_variable", self.selected_var_name, value)
-                self.app.call_from_thread(self.app.notify, f"Updated {self.selected_var_name}")
+                await self.client.alter(self.node_path, "add_variable", self.selected_var_name, value)
+                self.app.notify(f"Updated {self.selected_var_name}")
             else:
                 # Adding new (expecting name=value)
                 if "=" in value:
                     name, val = value.split("=", 1)
-                    self.client.alter(self.node_path, "add_variable", name.strip(), val.strip())
-                    self.app.call_from_thread(self.app.notify, f"Added {name.strip()}")
+                    await self.client.alter(self.node_path, "add_variable", name.strip(), val.strip())
+                    self.app.notify(f"Added {name.strip()}")
                 else:
-                    self.app.call_from_thread(self.app.notify, "Use name=value format to add", severity="warning")
+                    self.app.notify("Use name=value format to add", severity="warning")
                     return
 
-            self.app.call_from_thread(self._reset_input)
-            self.app.call_from_thread(self.refresh_vars)
+            self._reset_input()
+            await self.refresh_vars()
         except RuntimeError as e:
-            self.app.call_from_thread(self.app.notify, f"Error: {e}", severity="error")
+            self.app.notify(f"Error: {e}", severity="error")
         except Exception as e:
-            self.app.call_from_thread(self.app.notify, f"Unexpected Error: {e}", severity="error")
+            self.app.notify(f"Unexpected Error: {e}", severity="error")
 
     def _reset_input(self) -> None:
         """
         Reset the input field state.
-
-        Returns
-        -------
-        None
         """
         input_field = self.query_one("#var_input", Input)
         input_field.add_class("hidden")
@@ -336,10 +263,6 @@ class VariableTweaker(ModalScreen[None]):
     def action_add_variable(self) -> None:
         """
         Show the input field to add a new variable.
-
-        Returns
-        -------
-        None
         """
         input_field = self.query_one("#var_input", Input)
         input_field.placeholder = "Enter name=value to add"
@@ -350,10 +273,6 @@ class VariableTweaker(ModalScreen[None]):
     def action_delete_variable(self) -> None:
         """
         Delete the selected variable from the server.
-
-        Returns
-        -------
-        None
         """
         table = self.query_one("#var_table", DataTable)
         row_index = table.cursor_row
@@ -364,57 +283,41 @@ class VariableTweaker(ModalScreen[None]):
             if row_key:
                 self._delete_variable_worker(row_key)
 
-    @work(thread=True)
-    def _delete_variable_worker(self, row_key: str) -> None:
+    @work
+    async def _delete_variable_worker(self, row_key: str) -> None:
         """
         Worker to delete a variable from the server in a background thread.
 
-        Parameters
-        ----------
-        row_key : str
-            The name (or key) of the variable to delete.
+        Args:
+            row_key: The name (or key) of the variable to delete.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs blocking I/O.
+        Notes:
+            This is an async background worker.
         """
-        self._delete_variable_logic(row_key)
+        await self._delete_variable_logic(row_key)
 
-    def _delete_variable_logic(self, row_key: str) -> None:
+    async def _delete_variable_logic(self, row_key: str) -> None:
         """
         The actual logic for deleting a variable.
 
-        Parameters
-        ----------
-        row_key : str
-            The name (or key) of the variable to delete.
+        Args:
+            row_key: The name (or key) of the variable to delete.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the server alteration fails.
 
-        Raises
-        ------
-        RuntimeError
-            If the server alteration fails.
-
-        Notes
-        -----
-        This method can be called directly for testing.
+        Notes:
+            This method can be called directly for testing.
         """
         if row_key.startswith(INHERITED_VAR_PREFIX):
-            self.app.call_from_thread(self.app.notify, "Cannot delete inherited variables", severity="error")
+            self.app.notify("Cannot delete inherited variables", severity="error")
             return
 
         try:
-            self.client.alter(self.node_path, "delete_variable", row_key)
-            self.app.call_from_thread(self.app.notify, f"Deleted {row_key}")
-            self.app.call_from_thread(self.refresh_vars)
+            await self.client.alter(self.node_path, "delete_variable", row_key)
+            self.app.notify(f"Deleted {row_key}")
+            await self.refresh_vars()
         except RuntimeError as e:
-            self.app.call_from_thread(self.app.notify, f"Error: {e}", severity="error")
+            self.app.notify(f"Error: {e}", severity="error")
         except Exception as e:
-            self.app.call_from_thread(self.app.notify, f"Unexpected Error: {e}", severity="error")
+            self.app.notify(f"Unexpected Error: {e}", severity="error")

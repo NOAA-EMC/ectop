@@ -11,7 +11,7 @@ Additional tests to boost coverage and verify new functionality.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, PropertyMock, patch
 
 import pytest
 
@@ -22,7 +22,7 @@ from ectop.widgets.modals.why import WhyInspector
 @pytest.mark.asyncio
 async def test_app_action_requeue():
     """Verify that action_requeue correctly calls the client."""
-    mock_client = MagicMock()
+    mock_client = AsyncMock()
     with patch("ectop.app.EcflowClient", return_value=mock_client):
         app = Ectop()
         # Mock call_from_thread to avoid thread-check issues in run_test
@@ -38,7 +38,7 @@ async def test_app_action_requeue():
 @pytest.mark.asyncio
 async def test_app_action_copy_path():
     """Verify that action_copy_path notifies the user."""
-    mock_client = MagicMock()
+    mock_client = AsyncMock()
     with patch("ectop.app.EcflowClient", return_value=mock_client):
         app = Ectop()
         # Mock call_from_thread to avoid thread-check issues in run_test
@@ -53,26 +53,27 @@ async def test_app_action_copy_path():
                 assert "/suite/task" in str(notification.message)
 
 
-def test_why_inspector_error_handling():
+@pytest.mark.asyncio
+async def test_why_inspector_error_handling():
     """Test error handling logic in WhyInspector._refresh_deps_logic."""
-    mock_client = MagicMock()
+    mock_client = AsyncMock()
     inspector = WhyInspector("/node", mock_client)
 
     with patch.object(WhyInspector, "app", new_callable=PropertyMock) as mock_app:
-        app_mock = MagicMock()
+        app_mock = AsyncMock()
         mock_app.return_value = app_mock
         # Mock call_from_thread to execute the callback immediately
         app_mock.call_from_thread = lambda f, *args, **kwargs: f(*args, **kwargs)
 
-        tree = MagicMock()
-        tree.root = MagicMock()
+        tree = AsyncMock()
+        tree.root = AsyncMock()
 
         # Test RuntimeError
         mock_client.sync_local.side_effect = RuntimeError("Sync failed")
-        inspector._refresh_deps_logic(tree)
+        await inspector._refresh_deps_logic(tree)
         assert "Error: Sync failed" in str(tree.root.label)
 
         # Test generic Exception
         mock_client.sync_local.side_effect = Exception("Unexpected")
-        inspector._refresh_deps_logic(tree)
+        await inspector._refresh_deps_logic(tree)
         assert "Unexpected Error: Unexpected" in str(tree.root.label)

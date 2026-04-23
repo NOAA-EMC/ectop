@@ -78,7 +78,7 @@ class WhyInspector(ModalScreen[None]):
         """
         Initialize the WhyInspector.
 
-        Parameters:
+        Args:
             node_path: The absolute path to the ecFlow node.
             client: The ecFlow client instance.
         """
@@ -115,7 +115,7 @@ class WhyInspector(ModalScreen[None]):
         """
         Handle button press events.
 
-        Parameters:
+        Args:
             event: The button press event.
         """
         if event.button.id == "close_btn":
@@ -125,7 +125,7 @@ class WhyInspector(ModalScreen[None]):
         """
         Jump to the selected dependency node in the main tree.
 
-        Parameters:
+        Args:
             event: The tree node selection event.
         """
         node_path = event.node.data
@@ -147,66 +147,61 @@ class WhyInspector(ModalScreen[None]):
         tree = self.query_one("#dep_tree", Tree)
         self._refresh_deps_worker(tree)
 
-    @work(thread=True)
-    def _refresh_deps_worker(self, tree: Tree) -> None:
+    @work
+    async def _refresh_deps_worker(self, tree: Tree) -> None:
         """
         Worker to fetch dependencies from the server and rebuild the tree.
 
-        Parameters:
+        Args:
             tree: The tree widget to refresh.
 
         Notes:
-            This is a background worker that performs blocking I/O.
+            This is an async background worker.
         """
-        self._refresh_deps_logic(tree)
+        await self._refresh_deps_logic(tree)
 
-    def _refresh_deps_logic(self, tree: Tree) -> None:
+    async def _refresh_deps_logic(self, tree: Tree) -> None:
         """
         The actual logic for fetching dependencies and updating the UI tree.
 
-        Parameters:
+        Args:
             tree: The tree widget to refresh.
 
         Raises:
             RuntimeError: If server synchronization fails.
         """
         try:
-            self.client.sync_local()
-            defs = self.client.get_defs()
+            await self.client.sync_local()
+            defs = await self.client.get_defs()
             if not defs:
-                self.app.call_from_thread(self._update_tree_ui, tree, DepData("Server Empty"))
+                self._update_tree_ui(tree, DepData("Server Empty"))
                 return
 
             node = defs.find_abs_node(self.node_path)
             if not node:
-                self.app.call_from_thread(self._update_tree_ui, tree, DepData("Node not found"))
+                self._update_tree_ui(tree, DepData("Node not found"))
                 return
 
-            # Gather data in the worker thread
+            # Gather data (this is currently CPU-bound parsing)
             dep_data = self._gather_dependency_data(node, defs)
 
-            # Update UI on the main thread
-            self.app.call_from_thread(self._update_tree_ui, tree, dep_data)
+            # Update UI
+            self._update_tree_ui(tree, dep_data)
 
         except RuntimeError as e:
-            self.app.call_from_thread(self._update_tree_ui, tree, DepData(f"Error: {e}"))
+            self._update_tree_ui(tree, DepData(f"Error: {e}"))
         except Exception as e:
-            self.app.call_from_thread(self._update_tree_ui, tree, DepData(f"Unexpected Error: {e}"))
+            self._update_tree_ui(tree, DepData(f"Unexpected Error: {e}"))
 
     def _gather_dependency_data(self, node: Node, defs: Defs) -> DepData:
         """
         Gather dependency data from an ecFlow node.
 
-        Parameters
-        ----------
-        node : ecflow.Node
-            The ecFlow node to inspect.
-        defs : ecflow.Defs
-            The ecFlow definitions for node lookups.
+        Args:
+            node: The ecFlow node to inspect.
+            defs: The ecFlow definitions for node lookups.
 
-        Returns
-        -------
-        DepData
+        Returns:
             The root dependency data object.
         """
         root = DepData("Dependencies")
@@ -274,18 +269,12 @@ class WhyInspector(ModalScreen[None]):
         """
         Parse an ecFlow expression and populate DepData objects.
 
-        Parameters
-        ----------
-        parent : DepData
-            The parent DepData object.
-        expr_str : str
-            The expression string to parse.
-        defs : ecflow.Defs
-            The ecFlow definitions for node lookups.
+        Args:
+            parent: The parent DepData object.
+            expr_str: The expression string to parse.
+            defs: The ecFlow definitions for node lookups.
 
-        Returns
-        -------
-        bool
+        Returns:
             True if the expression is currently met.
         """
         try:
@@ -379,7 +368,7 @@ class WhyInspector(ModalScreen[None]):
         """
         Update the tree UI from DepData.
 
-        Parameters:
+        Args:
             tree: The tree widget.
             data: The root dependency data.
         """
@@ -393,7 +382,7 @@ class WhyInspector(ModalScreen[None]):
         """
         Recursively add DepData to the Textual Tree.
 
-        Parameters:
+        Args:
             parent_node: The parent TreeNode.
             data: The DepData to add.
         """
