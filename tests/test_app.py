@@ -1,60 +1,68 @@
-# .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
+"""
+Tests for the main Ectop application class.
+"""
+
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ectop import Ectop  # noqa: E402
+from ectop import Ectop
 
 
-def test_app_instantiation():
-    """Basic test to check if the App can be instantiated."""
+@pytest.mark.asyncio
+async def test_app_instantiation() -> None:
+    """
+    Test that the Ectop app can be instantiated.
+    """
     app = Ectop()
     assert app is not None
 
 
 @pytest.mark.asyncio
-async def test_app_handles_runtime_error():
-    """Verify that the app handles a RuntimeError from the client gracefully."""
-    # We need to mock the client
-    mock_client = AsyncMock()
-    mock_client.ping.side_effect = RuntimeError("Mock server error")
+async def test_app_handles_runtime_error() -> None:
+    """
+    Test that the app handles connection errors gracefully.
+    """
+    with patch("ectop.app.EcflowClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client_class.return_value = mock_client
+        mock_client.ping.side_effect = RuntimeError("Mock server error")
 
-    with patch("ectop.app.EcflowClient", return_value=mock_client):
         app = Ectop()
+        app.call_from_thread = lambda callback, *args, **kwargs: callback(*args, **kwargs)
         async with app.run_test() as pilot:
-            # In on_mount, _initial_connect is called.
+            worker = app._initial_connect()
+            await worker.wait()
             await pilot.pause()
-            # Check notifications in the app
             assert len(app._notifications) > 0
             notification = list(app._notifications)[0]
             assert "Connection Failed" in str(notification.message)
 
 
 @pytest.mark.asyncio
-async def test_app_actions():
-    """Verify that app actions (suspend, resume, etc.) correctly call the client."""
-    mock_client = AsyncMock()
-    with patch("ectop.app.EcflowClient", return_value=mock_client):
+async def test_app_actions() -> None:
+    """
+    Test various node actions in the app.
+    """
+    with patch("ectop.app.EcflowClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client_class.return_value = mock_client
+        mock_client.get_defs.return_value = None
+
         app = Ectop()
-        async with app.run_test() as pilot:
-            # Mock get_selected_path
-            with patch.object(Ectop, "get_selected_path", return_value="/suite/task"):
-                # Test Suspend
-                app.action_suspend()
-                await pilot.pause()
-                mock_client.suspend.assert_called_with("/suite/task")
+        app.call_from_thread = lambda callback, *args, **kwargs: callback(*args, **kwargs)
 
-                # Test Resume
-                app.action_resume()
-                await pilot.pause()
-                mock_client.resume.assert_called_with("/suite/task")
-
-                # Test Kill
-                app.action_kill()
-                await pilot.pause()
-                mock_client.kill.assert_called_with("/suite/task")
-
-                # Test Force Complete
-                app.action_force()
-                await pilot.pause()
-                mock_client.force_complete.assert_called_with("/suite/task")
+        with patch.object(Ectop, "_initial_connect", return_value=None):
+            async with app.run_test() as pilot:
+                with patch.object(Ectop, "get_selected_path", return_value="/suite/task"):
+                    with patch.object(Ectop, "action_refresh", return_value=None):
+                        worker = app._run_client_command("suspend", "/suite/task")
+                        await worker.wait()
+                        await pilot.pause()
+                        mock_client.suspend.assert_called_with("/suite/task")

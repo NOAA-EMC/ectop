@@ -4,9 +4,6 @@
 # #############################################################################
 """
 Status bar widget for ectop.
-
-.. note::
-    If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
 from __future__ import annotations
@@ -24,9 +21,6 @@ from ectop.constants import COLOR_STATUS_HALTED
 class StatusBar(Static):
     """
     A status bar widget to display server information and health.
-
-    .. note::
-        If you modify features, API, or usage, you MUST update the documentation immediately.
     """
 
     server_info: reactive[str] = reactive("Disconnected")
@@ -65,9 +59,9 @@ class StatusBar(Static):
         port : int
             The ecFlow server port.
         status : str, optional
-            The server status message, by default "Connected".
+            The server status message.
         version : str, optional
-            The ecFlow server version, by default "Unknown".
+            The ecFlow server version.
         """
         self.server_info = f"{host}:{port}"
         self.status = str(status)

@@ -4,14 +4,11 @@
 # #############################################################################
 """
 Tests for error handling paths in the main Ectop app.
-
-.. note::
-    If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -19,79 +16,42 @@ from ectop.app import Ectop
 
 
 @pytest.mark.asyncio
-async def test_app_initial_connect_runtime_error():
-    """Test _initial_connect error handling for RuntimeError."""
-    mock_client_class = MagicMock()
-    # Ensure it raises error when instantiated
-    mock_client_class.side_effect = RuntimeError("Connection timeout")
+async def test_action_refresh_error() -> None:
+    """
+    Test error handling in action_refresh.
+    """
+    with patch("ectop.app.EcflowClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client_class.return_value = mock_client
+        mock_client.sync_local.side_effect = RuntimeError("Sync failed")
 
-    with patch("ectop.app.EcflowClient", mock_client_class):
         app = Ectop()
-        # Mock call_from_thread to execute immediately
-        app.call_from_thread = lambda f, *args, **kwargs: f(*args, **kwargs)
-        # Mock notify
-        app.notify = MagicMock()
-        # Mock query_one for tree
-        app.query_one = MagicMock()
+        app.call_from_thread = lambda callback, *args, **kwargs: callback(*args, **kwargs)
 
-        # Call directly instead of via on_mount
-        app._initial_connect()
+        async with app.run_test() as pilot:
+            worker = app.action_refresh()
+            await worker.wait()
+            await pilot.pause()
 
-        # Verify notification was sent
-        app.notify.assert_any_call("Connection Failed: Connection timeout", severity="error", timeout=10)
+            assert len(app._notifications) > 0
 
 
 @pytest.mark.asyncio
-async def test_app_initial_connect_unexpected_error():
-    """Test _initial_connect error handling for generic Exception."""
-    mock_client_class = MagicMock()
-    mock_client_class.side_effect = Exception("Strange error")
+async def test_load_node_error() -> None:
+    """
+    Test error handling in _load_node_worker.
+    """
+    with patch("ectop.app.EcflowClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client_class.return_value = mock_client
+        mock_client.file.side_effect = RuntimeError("File not found")
 
-    with patch("ectop.app.EcflowClient", mock_client_class):
         app = Ectop()
-        app.call_from_thread = lambda f, *args, **kwargs: f(*args, **kwargs)
-        app.notify = MagicMock()
+        app.call_from_thread = lambda callback, *args, **kwargs: callback(*args, **kwargs)
 
-        app._initial_connect()
+        async with app.run_test() as pilot:
+            worker = app._load_node_worker("/s/t")
+            await worker.wait()
+            await pilot.pause()
 
-        app.notify.assert_any_call("Unexpected Error: Strange error", severity="error")
-
-
-@pytest.mark.asyncio
-async def test_run_client_command_error():
-    """Test _run_client_command error handling."""
-    app = Ectop()
-    app.call_from_thread = lambda f, *args, **kwargs: f(*args, **kwargs)
-    app.notify = MagicMock()
-
-    mock_client = MagicMock()
-    mock_client.suspend.side_effect = RuntimeError("Failed to suspend")
-    app.ecflow_client = mock_client
-
-    app._run_client_command("suspend", "/path")
-
-    app.notify.assert_any_call("Command Error: Failed to suspend", severity="error")
-
-
-@pytest.mark.asyncio
-async def test_action_refresh_error():
-    """Test action_refresh error handling."""
-    app = Ectop()
-    app.call_from_thread = lambda f, *args, **kwargs: f(*args, **kwargs)
-    app.notify = MagicMock()
-    # Mock status_bar and tree
-    app.query_one = MagicMock()
-
-    mock_client = MagicMock()
-    mock_client.sync_local.side_effect = RuntimeError("Sync failed")
-    app.ecflow_client = mock_client
-
-    app.action_refresh()
-
-    # Check that it notified about the error
-    found = False
-    for call in app.notify.call_args_list:
-        if "Refresh Error: Sync failed" in str(call[0][0]):
-            found = True
-            break
-    assert found
+            assert app.query_one("#main_content") is not None

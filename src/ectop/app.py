@@ -4,13 +4,11 @@
 # #############################################################################
 """
 Main application class for ectop.
-
-.. note::
-    If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import tempfile
@@ -49,28 +47,20 @@ from ectop.widgets.statusbar import StatusBar
 
 
 class EctopCommands(Provider):
-    """
-    Command provider for ectop.
-    """
+    """Command palette provider for ectop."""
 
     async def search(self, query: str) -> Hits:
-        """
-        Search for commands.
+        """Search for commands in the palette.
 
-        Parameters
-        ----------
-        query : str
-            The search query.
+        Args:
+            query (str): The search query.
 
-        Yields
-        ------
-        Hit
-            A command hit.
+        Yields:
+            Hit: Command hits matching the query.
         """
         matcher = self.matcher(query)
         app = self.app
         assert isinstance(app, Ectop)
-
         commands = [
             ("Refresh Tree", app.action_refresh, "Refresh the ecFlow suite tree"),
             ("Search Nodes", app.action_search, "Search for a node by name or path"),
@@ -89,76 +79,24 @@ class EctopCommands(Provider):
             ("Toggle Live Log", app.action_toggle_live, "Toggle live log updates"),
             ("Quit", app.action_quit, "Quit the application"),
         ]
-
         for name, action, help_text in commands:
             score = matcher.match(name)
             if score > 0:
-                yield Hit(
-                    score,
-                    matcher.highlight(name),
-                    action,
-                    help=help_text,
-                )
+                yield Hit(score, matcher.highlight(name), action, help=help_text)
 
 
 class Ectop(App):
-    """
-    A Textual-based TUI for monitoring and controlling ecFlow.
-
-    .. note::
-        If you modify features, API, or usage, you MUST update the documentation immediately.
-    """
+    """The main ecFlow TUI application."""
 
     CSS = f"""
-    Screen {{
-        background: {COLOR_BG};
-    }}
-
-    StatusBar {{
-        dock: bottom;
-        height: 1;
-        background: {COLOR_STATUS_BAR_BG};
-        color: {COLOR_TEXT};
-    }}
-
-    /* Left Sidebar (Tree) */
-    #sidebar {{
-        width: 30%;
-        height: 100%;
-        border-right: solid {COLOR_BORDER};
-        background: {COLOR_SIDEBAR_BG};
-    }}
-
-    Tree {{
-        background: {COLOR_SIDEBAR_BG};
-        color: {COLOR_TEXT};
-        padding: 1;
-    }}
-
-    /* Right Content (Tabs) */
-    #main_content {{
-        width: 70%;
-        height: 100%;
-    }}
-
-    TabbedContent {{
-        height: 100%;
-    }}
-
-    /* Content Areas */
-    RichLog {{
-        background: {COLOR_CONTENT_BG};
-        color: {COLOR_TEXT_HIGHLIGHT};
-        border: none;
-    }}
-
-    .code_view {{
-        background: {COLOR_CONTENT_BG};
-        padding: 1;
-        width: 100%;
-        height: auto;
-    }}
-
+    Screen {{ background: {COLOR_BG}; }}
+    StatusBar {{ dock: bottom; height: 1; background: {COLOR_STATUS_BAR_BG}; color: {COLOR_TEXT}; }}
+    #sidebar {{ width: 30%; height: 100%; border-right: solid {COLOR_BORDER}; background: {COLOR_SIDEBAR_BG}; }}
+    Tree {{ background: {COLOR_SIDEBAR_BG}; color: {COLOR_TEXT}; padding: 1; }}
+    #main_content {{ width: 70%; height: 100%; }}
+    TabbedContent {{ height: 100%; }}
+    RichLog {{ background: {COLOR_CONTENT_BG}; color: {COLOR_TEXT_HIGHLIGHT}; border: none; }}
+    .code_view {{ background: {COLOR_CONTENT_BG}; padding: 1; width: 100%; height: auto; }}
     #search_box {{
         dock: top;
         display: none;
@@ -166,69 +104,18 @@ class Ectop(App):
         color: {COLOR_TEXT_HIGHLIGHT};
         border: tall {COLOR_BORDER};
     }}
-
-    #search_box.visible {{
-        display: block;
-    }}
-
-    #why_container {{
-        padding: 1 2;
-        background: {COLOR_BG};
-        border: thick {COLOR_BORDER};
-        width: 60%;
-        height: 60%;
-    }}
-
-    #why_title {{
-        text-align: center;
-        background: {COLOR_HEADER_BG};
-        color: white;
-        margin-bottom: 1;
-    }}
-
-    #confirm_container {{
-        padding: 1 2;
-        background: {COLOR_BG};
-        border: thick {COLOR_BORDER};
-        width: 40%;
-        height: 20%;
-    }}
-
-    #confirm_message {{
-        text-align: center;
-        margin-bottom: 1;
-    }}
-
-    #confirm_actions {{
-        align: center middle;
-    }}
-
-    #confirm_actions Button {{
-        margin: 0 1;
-    }}
-
-    #var_container {{
-        padding: 1 2;
-        background: {COLOR_BG};
-        border: thick {COLOR_BORDER};
-        width: 80%;
-        height: 80%;
-    }}
-
-    #var_title {{
-        text-align: center;
-        background: {COLOR_HEADER_BG};
-        color: white;
-        margin-bottom: 1;
-    }}
-
-    #var_input.hidden {{
-        display: none;
-    }}
+    #search_box.visible {{ display: block; }}
+    #why_container {{ padding: 1 2; background: {COLOR_BG}; border: thick {COLOR_BORDER}; width: 60%; height: 60%; }}
+    #why_title {{ text-align: center; background: {COLOR_HEADER_BG}; color: white; margin-bottom: 1; }}
+    #confirm_container {{ padding: 1 2; background: {COLOR_BG}; border: thick {COLOR_BORDER}; width: 40%; height: 20%; }}
+    #confirm_message {{ text-align: center; margin-bottom: 1; }}
+    #confirm_actions {{ align: center middle; }}
+    #confirm_actions Button {{ margin: 0 1; }}
+    #var_container {{ padding: 1 2; background: {COLOR_BG}; border: thick {COLOR_BORDER}; width: 80%; height: 80%; }}
+    #var_title {{ text-align: center; background: {COLOR_HEADER_BG}; color: white; margin-bottom: 1; }}
+    #var_input.hidden {{ display: none; }}
     """
-
     COMMANDS = App.COMMANDS | {EctopCommands}
-
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("p", "command_palette", "Command Palette"),
@@ -258,34 +145,25 @@ class Ectop(App):
         refresh_interval: float = DEFAULT_REFRESH_INTERVAL,
         **kwargs: Any,
     ) -> None:
-        """
-        Initialize the application.
+        """Initialize the Ectop app.
 
-        Parameters
-        ----------
-        host : str, optional
-            The ecFlow server hostname, by default DEFAULT_HOST.
-        port : int, optional
-            The ecFlow server port, by default DEFAULT_PORT.
-        refresh_interval : float, optional
-            The interval for live log updates, by default DEFAULT_REFRESH_INTERVAL.
-        **kwargs : Any
-            Additional keyword arguments for the Textual App.
+        Args:
+            host (str): The ecFlow server hostname.
+            port (int): The ecFlow server port.
+            refresh_interval (float): Automatic refresh interval in seconds.
+            **kwargs (Any): Additional arguments for the Textual App.
         """
         super().__init__(**kwargs)
         self.host = host
         self.port = port
         self.refresh_interval = refresh_interval
-        self.ecflow_client: EcflowClient | None = None
+        self.ecflow_client: EcflowClient = EcflowClient(self.host, self.port)
 
     def compose(self) -> ComposeResult:
-        """
-        Compose the UI layout.
+        """Compose the app UI.
 
-        Returns
-        -------
-        ComposeResult
-            The UI components.
+        Returns:
+            ComposeResult: The UI components for the app.
         """
         yield Header(show_clock=True)
         yield SearchBox(placeholder="Search nodes...", id="search_box")
@@ -296,101 +174,55 @@ class Ectop(App):
         yield StatusBar(id="status_bar")
         yield Footer()
 
-    def on_mount(self) -> None:
-        """
-        Handle the mount event to start the application.
-
-        Returns
-        -------
-        None
-        """
+    async def on_mount(self) -> None:
+        """Handle mount event."""
         self._initial_connect()
         self.set_interval(self.refresh_interval, self._live_log_tick)
 
     def on_tree_node_selected(self, event: SuiteTree.NodeSelected[str]) -> None:
-        """
-        Handle node selection to automatically load content.
+        """Handle tree node selection.
 
-        Parameters
-        ----------
-        event : SuiteTree.NodeSelected[str]
-            The node selection event.
+        Args:
+            event (SuiteTree.NodeSelected): The selection event.
         """
         if event.node.data:
             self.action_load_node()
 
     @work()
     async def _initial_connect(self) -> None:
-        """
-        Perform initial connection to the ecFlow server.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs async I/O.
-        """
+        """Establish initial connection to ecFlow server."""
         try:
-            self.ecflow_client = EcflowClient(self.host, self.port)
             await self.ecflow_client.ping()
-            # Initial refresh
-            await self.action_refresh()
+            self.action_refresh()
         except RuntimeError as e:
             self.notify(f"{ERROR_CONNECTION_FAILED}: {e}", severity="error", timeout=10)
-            tree = self.query_one("#suite_tree", SuiteTree)
-            self._update_tree_error(tree)
+            self._update_tree_error(self.query_one("#suite_tree", SuiteTree))
         except Exception as e:
             self.notify(f"Unexpected Error: {e}", severity="error")
 
     def _update_tree_error(self, tree: SuiteTree) -> None:
-        """
-        Update tree root to show error.
+        """Update tree root to show error.
 
-        Parameters
-        ----------
-        tree : SuiteTree
-            The suite tree widget.
-
-        Returns
-        -------
-        None
+        Args:
+            tree (SuiteTree): The tree widget to update.
         """
         tree.root.label = f"[red]{ERROR_CONNECTION_FAILED} (Check Host/Port)[/]"
 
     @work(exclusive=True)
     async def action_refresh(self) -> None:
-        """
-        Fetch suites from server and rebuild the tree.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs async I/O.
-        """
-        if not self.ecflow_client:
-            return
-
+        """Refresh the ecFlow definition tree."""
         self.notify("Refreshing tree...")
-
         tree = self.query_one("#suite_tree", SuiteTree)
         status_bar = self.query_one("#status_bar", StatusBar)
         try:
             await self.ecflow_client.sync_local()
             defs = await self.ecflow_client.get_defs()
-            status = "Connected"
+            status = str(defs.get_server_state()) if defs else "Connected"
             version = "Unknown"
-            if defs:
-                status = str(defs.get_server_state())
             try:
                 version = await self.ecflow_client.server_version()
             except RuntimeError:
                 pass
-
             tree.update_tree(self.ecflow_client.host, self.ecflow_client.port, defs)
             status_bar.update_status(self.ecflow_client.host, self.ecflow_client.port, status=status, version=version)
             self.notify("Tree Refreshed")
@@ -402,40 +234,29 @@ class Ectop(App):
 
     @work()
     async def action_restart_server(self) -> None:
-        """
-        Restart the ecFlow server (RUNNING).
-        """
-        if not self.ecflow_client:
-            return
+        """Restart the ecFlow server scheduling."""
         try:
             await self.ecflow_client.restart_server()
             self.notify("Server Started (RUNNING)")
-            await self.action_refresh()
+            self.action_refresh()
         except Exception as e:
             self.notify(f"Restart Error: {e}", severity="error")
 
     @work()
     async def action_halt_server(self) -> None:
-        """
-        Halt the ecFlow server (HALT).
-        """
-        if not self.ecflow_client:
-            return
+        """Halt the ecFlow server scheduling."""
         try:
             await self.ecflow_client.halt_server()
             self.notify("Server Halted (HALT)")
-            await self.action_refresh()
+            self.action_refresh()
         except Exception as e:
             self.notify(f"Halt Error: {e}", severity="error")
 
     def get_selected_path(self) -> str | None:
-        """
-        Helper to get the ecFlow path of the selected node.
+        """Get the absolute path of the selected node.
 
-        Returns
-        -------
-        str | None
-            The absolute path of the selected node, or None if no node is selected.
+        Returns:
+            str | None: The absolute path of the selected node or None.
         """
         try:
             node = self.query_one("#suite_tree", SuiteTree).cursor_node
@@ -444,13 +265,7 @@ class Ectop(App):
             return None
 
     def action_load_node(self) -> None:
-        """
-        Fetch Output, Script, and Job files for the selected node.
-
-        Returns
-        -------
-        None
-        """
+        """Load logs/scripts for the selected node."""
         path = self.get_selected_path()
         if not path:
             self.notify("No node selected", severity="warning")
@@ -459,49 +274,27 @@ class Ectop(App):
 
     @work(exclusive=True)
     async def _load_node_worker(self, path: str) -> None:
+        """Worker to load node files from server.
+
+        Args:
+            path (str): The absolute path of the node to load.
         """
-        Worker to fetch files for a node.
-
-        Parameters
-        ----------
-        path : str
-            The ecFlow node path.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs async I/O and UI updates.
-        """
-        if not self.ecflow_client:
-            return
-
         self.notify(f"Loading files for {path}...")
         content_area = self.query_one("#main_content", MainContent)
-
         try:
-            # Sync to get latest try numbers for filenames
             await self.ecflow_client.sync_local()
         except RuntimeError:
             pass
-
-        # 1. Output Log
         try:
             content = await self.ecflow_client.file(path, "jobout")
             content_area.update_log(content)
         except RuntimeError:
             content_area.show_error("#log_output", "File type 'jobout' not found.")
-
-        # 2. Script
         try:
             content = await self.ecflow_client.file(path, "script")
             content_area.update_script(content)
         except RuntimeError:
             content_area.show_error("#view_script", "File type 'script' not available.")
-
-        # 3. Job
         try:
             content = await self.ecflow_client.file(path, "job")
             content_area.update_job(content)
@@ -510,104 +303,50 @@ class Ectop(App):
 
     @work()
     async def _run_client_command(self, command_name: str, path: str | None) -> None:
+        """Run an arbitrary EcflowClient command.
+
+        Args:
+            command_name (str): Name of the method on EcflowClient to call.
+            path (str | None): Absolute path to the node.
         """
-        Generic helper to run ecflow commands in a worker thread.
-
-        Parameters
-        ----------
-        command_name : str
-            The name of the command to run on the EcflowClient.
-        path : str | None
-            The absolute path to the node.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs async I/O.
-        """
-        if not path or not self.ecflow_client:
+        if not path:
             return
         try:
             method = getattr(self.ecflow_client, command_name)
             await method(path)
             self.notify(f"{command_name.replace('_', ' ').capitalize()}: {path}")
-            await self.action_refresh()
+            self.action_refresh()
         except RuntimeError as e:
             self.notify(f"Command Error: {e}", severity="error")
         except Exception as e:
             self.notify(f"Unexpected Error: {e}", severity="error")
 
     def action_suspend(self) -> None:
-        """
-        Suspend the selected node.
-
-        Returns
-        -------
-        None
-        """
+        """Suspend the selected node."""
         self._run_client_command("suspend", self.get_selected_path())
 
     def action_resume(self) -> None:
-        """
-        Resume the selected node.
-
-        Returns
-        -------
-        None
-        """
+        """Resume the selected node."""
         self._run_client_command("resume", self.get_selected_path())
 
     def action_kill(self) -> None:
-        """
-        Kill the selected node.
-
-        Returns
-        -------
-        None
-        """
+        """Kill the selected node."""
         self._run_client_command("kill", self.get_selected_path())
 
     def action_force(self) -> None:
-        """
-        Force complete the selected node.
-
-        Returns
-        -------
-        None
-        """
+        """Force complete the selected node."""
         self._run_client_command("force_complete", self.get_selected_path())
 
     def action_cycle_filter(self) -> None:
-        """
-        Cycle through tree filters.
-
-        Returns
-        -------
-        None
-        """
+        """Cycle status filters."""
         self.query_one("#suite_tree", SuiteTree).action_cycle_filter()
 
     def action_requeue(self) -> None:
-        """
-        Requeue the selected node.
-
-        Returns
-        -------
-        None
-        """
+        """Requeue the selected node."""
         self._run_client_command("requeue", self.get_selected_path())
 
     def action_copy_path(self) -> None:
-        """
-        Copy the selected node path to the clipboard.
-
-        Returns
-        -------
-        None
-        """
+        """Copy the selected node path to clipboard."""
         path = self.get_selected_path()
         if path:
             if hasattr(self, "copy_to_clipboard"):
@@ -619,30 +358,15 @@ class Ectop(App):
             self.notify("No node selected", severity="warning")
 
     def action_toggle_live(self) -> None:
-        """
-        Toggle live log updates.
-
-        Returns
-        -------
-        None
-        """
+        """Toggle live log updating."""
         content_area = self.query_one("#main_content", MainContent)
         content_area.is_live = not content_area.is_live
-        state = "ON" if content_area.is_live else "OFF"
-        self.notify(f"Live Log: {state}")
+        self.notify(f"Live Log: {'ON' if content_area.is_live else 'OFF'}")
         if content_area.is_live:
             content_area.active = "tab_output"
 
     def _live_log_tick(self) -> None:
-        """
-        Periodic tick to update the live log if enabled.
-
-        Returns
-        -------
-        None
-        """
-        if not self.ecflow_client:
-            return
+        """Tick for live log updates."""
         content_area = self.query_one("#main_content", MainContent)
         if content_area.is_live and content_area.active == "tab_output":
             path = self.get_selected_path()
@@ -651,77 +375,39 @@ class Ectop(App):
 
     @work(exclusive=True)
     async def _live_log_worker(self, path: str) -> None:
+        """Worker to fetch live log content.
+
+        Args:
+            path (str): Absolute path to the node.
         """
-        Worker to fetch the latest log content for live updates.
-
-        Parameters
-        ----------
-        path : str
-            The ecFlow node path.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs async I/O and UI updates.
-        """
-        if not self.ecflow_client:
-            return
         try:
             content = await self.ecflow_client.file(path, "jobout")
-            content_area = self.query_one("#main_content", MainContent)
-            content_area.update_log(content, append=True)
+            self.query_one("#main_content", MainContent).update_log(content, append=True)
         except RuntimeError:
             pass
 
     def action_why(self) -> None:
-        """
-        Show the 'Why' inspector for the selected node.
-
-        Returns
-        -------
-        None
-        """
+        """Open the WhyInspector for the selected node."""
         path = self.get_selected_path()
-        if not path or not self.ecflow_client:
+        if not path:
             self.notify("No node selected", severity="warning")
             return
         self.push_screen(WhyInspector(path, self.ecflow_client))
 
     def action_variables(self) -> None:
-        """
-        Show the variable tweaker for the selected node.
-
-        Returns
-        -------
-        None
-        """
+        """Open the VariableTweaker for the selected node."""
         path = self.get_selected_path()
-        if not path or not self.ecflow_client:
+        if not path:
             self.notify("No node selected", severity="warning")
             return
         self.push_screen(VariableTweaker(path, self.ecflow_client))
 
     def action_search_content(self) -> None:
-        """
-        Trigger content search in the main content area.
-
-        Returns
-        -------
-        None
-        """
+        """Trigger search in the main content area."""
         self.query_one("#main_content", MainContent).action_search()
 
     def action_edit_script(self) -> None:
-        """
-        Open the node script in an editor and update it on the server.
-
-        Returns
-        -------
-        None
-        """
+        """Open editor for node script."""
         path = self.get_selected_path()
         if not path:
             self.notify("No node selected", severity="warning")
@@ -730,83 +416,53 @@ class Ectop(App):
 
     @work(exclusive=True)
     async def _edit_script_worker(self, path: str) -> None:
+        """Worker to handle script editing lifecycle.
+
+        Args:
+            path (str): Absolute path to the node to edit.
         """
-        Worker to fetch script and prepare for editing.
-
-        Parameters
-        ----------
-        path : str
-            The ecFlow node path.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs async I/O and schedules an editor.
-        """
-        if not self.ecflow_client:
-            return
-
         try:
             content = await self.ecflow_client.file(path, "script")
             with tempfile.NamedTemporaryFile(suffix=".ecf", delete=False, mode="w") as f:
                 f.write(content)
                 temp_path = f.name
-
-            self._run_editor(temp_path, path, content)
-
+            await self._run_editor_async(temp_path, path, content)
         except RuntimeError as e:
             self.notify(f"Edit Error: {e}", severity="error")
         except Exception as e:
             self.notify(f"Unexpected Error: {e}", severity="error")
 
-    def _run_editor(self, temp_path: str, path: str, old_content: str) -> None:
-        """
-        Run the editor in a suspended state.
+    async def _run_editor_async(self, temp_path: str, path: str, old_content: str) -> None:
+        """Asynchronously run the system editor.
 
-        Parameters
-        ----------
-        temp_path : str
-            Path to the temporary file.
-        path : str
-            The ecFlow node path.
-        old_content : str
-            The original content of the script.
+        Args:
+            temp_path (str): Path to the temporary file.
+            path (str): Absolute path to the ecFlow node.
+            old_content (str): The original script content.
         """
         editor = os.environ.get("EDITOR", DEFAULT_EDITOR)
         with self.suspend():
-            subprocess.run([editor, temp_path], check=False)
-
+            await asyncio.to_thread(subprocess.run, [editor, temp_path], check=False)
         self._finish_edit(temp_path, path, old_content)
 
     @work()
     async def _finish_edit(self, temp_path: str, path: str, old_content: str) -> None:
-        """
-        Process the edited script and update the server.
+        """Handle post-edit operations.
 
-        Parameters
-        ----------
-        temp_path : str
-            Path to the temporary file.
-        path : str
-            The ecFlow node path.
-        old_content : str
-            The original content of the script.
+        Args:
+            temp_path (str): Path to the temporary file.
+            path (str): Absolute path to the ecFlow node.
+            old_content (str): The original script content.
         """
         try:
             with open(temp_path) as f:
                 new_content = f.read()
-
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
-
             if new_content != old_content:
-                if self.ecflow_client:
-                    await self.ecflow_client.alter(path, "change", "script", new_content)
-                    self.notify("Script updated on server")
-                    self._prompt_requeue(path)
+                await self.ecflow_client.alter(path, "change", "script", new_content)
+                self.notify("Script updated on server")
+                self._prompt_requeue(path)
             else:
                 self.notify("No changes detected")
         except RuntimeError as e:
@@ -815,62 +471,42 @@ class Ectop(App):
             self.notify(f"Unexpected Error: {e}", severity="error")
 
     def _prompt_requeue(self, path: str) -> None:
-        """
-        Prompt the user to requeue the node after a script edit.
+        """Prompt user to requeue after script edit.
 
-        Parameters
-        ----------
-        path : str
-            The absolute path to the node.
+        Args:
+            path (str): Absolute path to the node.
         """
         from ectop.widgets.modals.confirm import ConfirmModal
 
         def do_requeue() -> None:
-            if self.ecflow_client:
-                # We should probably run this in a worker too, but for simplicity
-                # we'll call a worker-wrapped method
-                self._run_client_command("requeue", path)
+            self._run_client_command("requeue", path)
 
         self.push_screen(ConfirmModal(f"Re-queue {path} now?", do_requeue))
 
     def action_search(self) -> None:
-        """
-        Show the search box.
-
-        Returns
-        -------
-        None
-        """
+        """Show the search box."""
         search_box = self.query_one("#search_box", SearchBox)
         search_box.add_class("visible")
         search_box.focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """
-        Handle search submission.
+        """Handle input submission (Search).
 
-        Parameters
-        ----------
-        event : Input.Submitted
-            The input submission event.
+        Args:
+            event (Input.Submitted): The submission event.
         """
         if event.input.id == "search_box":
             query = event.value
             if query:
-                tree = self.query_one("#suite_tree", SuiteTree)
-                tree.find_and_select(query)
+                self.query_one("#suite_tree", SuiteTree).find_and_select(query)
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """
-        Handle search input changes for live search.
+        """Handle input changes (Live Search).
 
-        Parameters
-        ----------
-        event : Input.Changed
-            The input changed event.
+        Args:
+            event (Input.Changed): The change event.
         """
         if event.input.id == "search_box":
             query = event.value
             if query:
-                tree = self.query_one("#suite_tree", SuiteTree)
-                tree.find_and_select(query)
+                self.query_one("#suite_tree", SuiteTree).find_and_select(query)

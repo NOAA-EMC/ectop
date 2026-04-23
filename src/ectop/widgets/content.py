@@ -4,9 +4,6 @@
 # #############################################################################
 """
 Main content area for displaying ecFlow node information.
-
-.. note::
-    If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
 from __future__ import annotations
@@ -27,16 +24,6 @@ from ectop.utils import safe_call_app
 class MainContent(Vertical):
     """
     A container to display Output logs, Scripts, and Job files in tabs.
-
-    .. note::
-        If you modify features, API, or usage, you MUST update the documentation immediately.
-
-    Attributes
-    ----------
-    is_live : bool
-        Whether live log updates are enabled.
-    last_log_size : int
-        The size of the log content at the last update.
     """
 
     is_live: reactive[bool] = reactive(False, init=False)
@@ -121,11 +108,6 @@ class MainContent(Vertical):
         """
         widget = self.query_one("#log_output", RichLog)
         self._content_cache["output"] = content
-        # Check if this is an append or a full refresh.
-        # Simple heuristic: if content starts with old content, it might be an append.
-        # But for robustness, we just clear and rewrite unless specifically asked.
-        # Since reactive doesn't easily support 'append' flag, we'll keep update_log
-        # for append operations but use reactive for full updates.
         widget.clear()
         self.last_log_size = len(content)
         widget.write(content)
@@ -204,10 +186,6 @@ class MainContent(Vertical):
     def action_search(self) -> None:
         """
         Toggle the content search input.
-
-        Returns
-        -------
-        None
         """
         search_input = self.query_one("#content_search", Input)
         if "hidden" in search_input.classes:
@@ -215,7 +193,6 @@ class MainContent(Vertical):
             search_input.focus()
         else:
             search_input.add_class("hidden")
-            # Refocus the active tab's content
             active_tab = self.active
             if active_tab == "tab_output":
                 self.query_one("#log_output").focus()
@@ -228,10 +205,6 @@ class MainContent(Vertical):
         ----------
         event : Input.Submitted
             The input submission event.
-
-        Returns
-        -------
-        None
         """
         if event.input.id == "content_search":
             query = event.value
@@ -251,8 +224,8 @@ class MainContent(Vertical):
             content = self._content_cache.get(cache_key, "")
             self._run_search_worker(query, content, label)
 
-    @work(thread=True)
-    def _run_search_worker(self, query: str, content: str, label: str) -> None:
+    @work()
+    async def _run_search_worker(self, query: str, content: str, label: str) -> None:
         """
         Run the search in a background worker.
 
@@ -267,9 +240,25 @@ class MainContent(Vertical):
         """
         matches = content.lower().count(query.lower())
         if matches > 0:
-            safe_call_app(self.app, self.app.notify, f"Found {matches} matches for '{query}' in {label}", severity="information")
+            self._safe_notify(f"Found {matches} matches for '{query}' in {label}", severity="information")
         else:
-            safe_call_app(self.app, self.app.notify, f"No matches found for '{query}' in {label}", severity="warning")
+            self._safe_notify(f"No matches found for '{query}' in {label}", severity="warning")
+
+    def _safe_notify(self, message: str, severity: str = "information") -> None:
+        """
+        Safely send a notification.
+
+        Parameters
+        ----------
+        message : str
+            The message to notify.
+        severity : str, optional
+            The severity level.
+        """
+        try:
+            safe_call_app(self.app, self.app.notify, message, severity=severity)
+        except (AttributeError, RuntimeError):
+            pass
 
     def show_error(self, widget_id: str, message: str) -> None:
         """

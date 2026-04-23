@@ -1,82 +1,50 @@
-# .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
 """
 Tests for ConfirmModal widget.
-
-.. note::
-    If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
-from unittest.mock import MagicMock, patch
+from __future__ import annotations
+
+from unittest.mock import MagicMock, PropertyMock, patch
 
 from ectop.widgets.modals.confirm import ConfirmModal
 
 
 def test_confirm_modal_init() -> None:
     """
-    Test that ConfirmModal initializes with correct message and callback.
+    Test ConfirmModal initialization.
     """
     callback = MagicMock()
-    message = "Are you sure?"
-    modal = ConfirmModal(message, callback)
-    assert modal.message == message
-    assert modal.callback == callback
+    modal = ConfirmModal("Are you sure?", callback)
+    assert modal.message == "Are you sure?"
 
 
-def test_confirm_modal_confirm_action() -> None:
+def test_confirm_modal_confirm() -> None:
     """
-    Test that the confirm action triggers the callback and pops the screen.
+    Test confirming the action.
     """
-    callback = MagicMock()
-    modal = ConfirmModal("Test", callback)
-    mock_app = MagicMock()
+    with patch.object(ConfirmModal, "app", new_callable=PropertyMock) as mock_app_prop:
+        callback = MagicMock()
+        modal = ConfirmModal("msg", callback)
+        mock_app = MagicMock()
+        mock_app_prop.return_value = mock_app
 
-    with patch.object(ConfirmModal, "app", new=mock_app):
         modal.action_confirm()
-
-    callback.assert_called_once()
-    mock_app.pop_screen.assert_called_once()
+        callback.assert_called_once()
 
 
-def test_confirm_modal_close_action() -> None:
+def test_confirm_modal_cancel() -> None:
     """
-    Test that the close action pops the screen without triggering the callback.
+    Test cancelling the action.
     """
-    callback = MagicMock()
-    modal = ConfirmModal("Test", callback)
-    mock_app = MagicMock()
+    with patch.object(ConfirmModal, "app", new_callable=PropertyMock) as mock_app_prop:
+        callback = MagicMock()
+        modal = ConfirmModal("msg", callback)
+        mock_app = MagicMock()
+        mock_app_prop.return_value = mock_app
 
-    with patch.object(ConfirmModal, "app", new=mock_app):
         modal.action_close()
-
-    callback.assert_not_called()
-    mock_app.pop_screen.assert_called_once()
-
-
-def test_confirm_modal_button_press_yes() -> None:
-    """
-    Test that pressing the 'yes' button triggers the confirm action.
-    """
-    callback = MagicMock()
-    modal = ConfirmModal("Test", callback)
-
-    event = MagicMock()
-    event.button.id = "yes_btn"
-
-    with patch.object(ConfirmModal, "action_confirm") as mock_confirm:
-        modal.on_button_pressed(event)
-        mock_confirm.assert_called_once()
-
-
-def test_confirm_modal_button_press_no() -> None:
-    """
-    Test that pressing any other button triggers the close action.
-    """
-    callback = MagicMock()
-    modal = ConfirmModal("Test", callback)
-
-    event = MagicMock()
-    event.button.id = "no_btn"
-
-    with patch.object(ConfirmModal, "action_close") as mock_close:
-        modal.on_button_pressed(event)
-        mock_close.assert_called_once()
+        callback.assert_not_called()

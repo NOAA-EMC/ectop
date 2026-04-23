@@ -2,10 +2,7 @@
 # WARNING: If you modify features, API, or usage, you MUST update the
 # documentation immediately.
 # #############################################################################
-"""ecFlow Client Wrapper for ectop.
-
-If you modify features, API, or usage, you MUST update the documentation immediately.
-"""
+"""ecFlow Client Wrapper for ectop."""
 
 from __future__ import annotations
 
@@ -19,227 +16,304 @@ if TYPE_CHECKING:
 
 
 class EcflowClient:
-    """A wrapper around the ecflow.Client to provide a cleaner API and error handling.
-
-    If you modify features, API, or usage, you MUST update the documentation immediately.
-
-    Attributes:
-        host: The hostname of the ecFlow server.
-        port: The port number of the ecFlow server.
-        client: The underlying ecFlow client instance.
+    """
+    A wrapper around the ecflow.Client to provide a cleaner API and error handling.
     """
 
     def __init__(self, host: str = "localhost", port: int = 3141) -> None:
-        """Initialize the EcflowClient.
+        """
+        Initialize the EcflowClient.
 
-        Args:
-            host: The hostname of the ecFlow server, by default "localhost".
-            port: The port number of the ecFlow server, by default 3141.
-
-        Raises:
-            RuntimeError: If the ecFlow client cannot be initialized.
+        Parameters
+        ----------
+        host : str
+            The hostname of the ecFlow server.
+        port : int
+            The port of the ecFlow server.
         """
         self.host: str = host
         self.port: int = port
-        try:
-            self.client: ecflow.Client = ecflow.Client(host, port)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to initialize ecFlow client for {host}:{port}: {e}") from e
+
+    def _get_client(self) -> ecflow.Client:
+        """
+        Create a new ecflow.Client instance.
+
+        Returns
+        -------
+        ecflow.Client
+            A new ecflow client instance.
+        """
+        return ecflow.Client(self.host, self.port)
 
     async def ping(self) -> None:
-        """Ping the ecFlow server to check connectivity.
+        """
+        Ping the ecFlow server.
 
-        Raises:
-            RuntimeError: If the server is unreachable or the ping fails.
-
-        Note:
-            This is a non-blocking call that uses asyncio.to_thread.
+        Raises
+        ------
+        RuntimeError
+            If the ping fails.
         """
         try:
-            await asyncio.to_thread(self.client.ping)
+            client = self._get_client()
+            await asyncio.to_thread(client.ping)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to ping ecFlow server at {self.host}:{self.port}: {e}") from e
 
     async def sync_local(self) -> None:
-        """Synchronize the local definition with the server.
+        """
+        Synchronize definition.
 
-        Raises:
-            RuntimeError: If synchronization fails.
-
-        Note:
-            This is a non-blocking call that uses asyncio.to_thread.
+        Raises
+        ------
+        RuntimeError
+            If synchronization fails.
         """
         try:
-            await asyncio.to_thread(self.client.sync_local)
+            client = self._get_client()
+            await asyncio.to_thread(client.sync_local)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to sync with ecFlow server: {e}") from e
 
     async def get_defs(self) -> Defs | None:
-        """Retrieve the current definitions from the client.
+        """
+        Retrieve definitions.
 
-        Returns:
-            The ecFlow definitions, or None if not available.
+        Returns
+        -------
+        Defs | None
+            The ecFlow definitions or None if unavailable.
 
-        Raises:
-            RuntimeError: If the definitions cannot be retrieved.
+        Raises
+        ------
+        RuntimeError
+            If retrieval fails.
         """
         try:
-            return await asyncio.to_thread(self.client.get_defs)
+            client = self._get_client()
+            return await asyncio.to_thread(client.get_defs)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to get definitions from client: {e}") from e
 
     async def file(self, path: str, file_type: str) -> str:
-        """Retrieve a file (log, script, job) for a specific node.
+        """
+        Retrieve a file.
 
-        Args:
-            path: The absolute path to the node.
-            file_type: The type of file to retrieve ('jobout', 'script', 'job').
+        Parameters
+        ----------
+        path : str
+            Absolute path to the node.
+        file_type : str
+            Type of file (e.g., 'jobout', 'script', 'job').
 
-        Returns:
-            The content of the requested file.
+        Returns
+        -------
+        str
+            The content of the file.
 
-        Raises:
-            RuntimeError: If the file cannot be retrieved.
+        Raises
+        ------
+        RuntimeError
+            If retrieval fails.
         """
         try:
-            return await asyncio.to_thread(self.client.get_file, path, file_type)
+            client = self._get_client()
+            return await asyncio.to_thread(client.get_file, path, file_type)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to retrieve {file_type} for {path}: {e}") from e
 
     async def suspend(self, path: str) -> None:
-        """Suspend a node.
+        """
+        Suspend a node.
 
-        Args:
-            path: The absolute path to the node.
+        Parameters
+        ----------
+        path : str
+            Absolute path to the node.
 
-        Raises:
-            RuntimeError: If the node cannot be suspended.
+        Raises
+        ------
+        RuntimeError
+            If the operation fails.
         """
         try:
-            await asyncio.to_thread(self.client.suspend, path)
+            client = self._get_client()
+            await asyncio.to_thread(client.suspend, path)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to suspend {path}: {e}") from e
 
     async def resume(self, path: str) -> None:
-        """Resume a suspended node.
+        """
+        Resume a node.
 
-        Args:
-            path: The absolute path to the node.
+        Parameters
+        ----------
+        path : str
+            Absolute path to the node.
 
-        Raises:
-            RuntimeError: If the node cannot be resumed.
+        Raises
+        ------
+        RuntimeError
+            If the operation fails.
         """
         try:
-            await asyncio.to_thread(self.client.resume, path)
+            client = self._get_client()
+            await asyncio.to_thread(client.resume, path)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to resume {path}: {e}") from e
 
     async def kill(self, path: str) -> None:
-        """Kill a running task.
+        """
+        Kill a task.
 
-        Args:
-            path: The absolute path to the node.
+        Parameters
+        ----------
+        path : str
+            Absolute path to the node.
 
-        Raises:
-            RuntimeError: If the node cannot be killed.
+        Raises
+        ------
+        RuntimeError
+            If the operation fails.
         """
         try:
-            await asyncio.to_thread(self.client.kill, path)
+            client = self._get_client()
+            await asyncio.to_thread(client.kill, path)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to kill {path}: {e}") from e
 
     async def force_complete(self, path: str) -> None:
-        """Force a node to the complete state.
+        """
+        Force complete a node.
 
-        Args:
-            path: The absolute path to the node.
+        Parameters
+        ----------
+        path : str
+            Absolute path to the node.
 
-        Raises:
-            RuntimeError: If the node state cannot be forced.
+        Raises
+        ------
+        RuntimeError
+            If the operation fails.
         """
         try:
-            await asyncio.to_thread(self.client.force_state, path, ecflow.State.complete)
+            client = self._get_client()
+            await asyncio.to_thread(client.force_state, path, ecflow.State.complete)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to force complete {path}: {e}") from e
 
     async def alter(self, path: str, alter_type: str, name: str, value: str = "") -> None:
-        """Alter a node attribute or variable.
+        """
+        Alter a node attribute.
 
-        Args:
-            path: The absolute path to the node.
-            alter_type: The type of alteration (e.g., 'change', 'add', 'delete').
-            name: The name of the attribute or variable.
-            value: The new value, by default "".
+        Parameters
+        ----------
+        path : str
+            Absolute path to the node.
+        alter_type : str
+            Type of alteration.
+        name : str
+            Name of the attribute.
+        value : str
+            New value.
 
-        Raises:
-            RuntimeError: If the alteration fails.
+        Raises
+        ------
+        RuntimeError
+            If the operation fails.
         """
         try:
-            await asyncio.to_thread(self.client.alter, path, alter_type, name, value)
+            client = self._get_client()
+            await asyncio.to_thread(client.alter, path, alter_type, name, value)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to alter {path} ({alter_type} {name}={value}): {e}") from e
 
     async def requeue(self, path: str) -> None:
-        """Requeue a node.
+        """
+        Requeue a node.
 
-        Args:
-            path: The absolute path to the node.
+        Parameters
+        ----------
+        path : str
+            Absolute path to the node.
 
-        Raises:
-            RuntimeError: If the node cannot be requeued.
+        Raises
+        ------
+        RuntimeError
+            If the operation fails.
         """
         try:
-            await asyncio.to_thread(self.client.requeue, path)
+            client = self._get_client()
+            await asyncio.to_thread(client.requeue, path)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to requeue {path}: {e}") from e
 
     async def restart_server(self) -> None:
-        """Restart the ecFlow server (resume from HALTED state).
+        """
+        Restart the ecFlow server scheduling.
 
-        Raises:
-            RuntimeError: If the server cannot be restarted.
+        Raises
+        ------
+        RuntimeError
+            If the operation fails.
         """
         try:
-            await asyncio.to_thread(self.client.restart_server)
+            client = self._get_client()
+            await asyncio.to_thread(client.restart_server)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to restart server: {e}") from e
 
     async def halt_server(self) -> None:
-        """Halt the ecFlow server (suspend scheduling).
+        """
+        Halt the ecFlow server scheduling.
 
-        Raises:
-            RuntimeError: If the server cannot be halted.
+        Raises
+        ------
+        RuntimeError
+            If the operation fails.
         """
         try:
-            await asyncio.to_thread(self.client.halt_server)
+            client = self._get_client()
+            await asyncio.to_thread(client.halt_server)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to halt server: {e}") from e
 
     async def version(self) -> str:
-        """Retrieve the ecFlow client version.
+        """
+        Get the client version.
 
-        Returns:
-            The client version string.
+        Returns
+        -------
+        str
+            The ecFlow client version.
 
-        Raises:
-            RuntimeError: If the version cannot be retrieved.
+        Raises
+        ------
+        RuntimeError
+            If retrieval fails.
         """
         try:
-            # Client version is typically local and non-blocking, but keeping it async for consistency
-            return str(await asyncio.to_thread(self.client.version))
+            client = self._get_client()
+            return str(await asyncio.to_thread(client.version))
         except RuntimeError as e:
             raise RuntimeError(f"Failed to get client version: {e}") from e
 
     async def server_version(self) -> str:
-        """Retrieve the ecFlow server version.
+        """
+        Get the server version.
 
-        Returns:
-            The server version string.
+        Returns
+        -------
+        str
+            The ecFlow server version.
 
-        Raises:
-            RuntimeError: If the server version cannot be retrieved.
+        Raises
+        ------
+        RuntimeError
+            If retrieval fails.
         """
         try:
-            return str(await asyncio.to_thread(self.client.server_version))
+            client = self._get_client()
+            return str(await asyncio.to_thread(client.server_version))
         except RuntimeError as e:
             raise RuntimeError(f"Failed to get server version: {e}") from e

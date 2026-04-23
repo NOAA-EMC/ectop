@@ -4,9 +4,6 @@
 # #############################################################################
 """
 Confirmation modal dialog.
-
-.. note::
-    If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
 from __future__ import annotations
@@ -23,9 +20,6 @@ from textual.widgets import Button, Static
 class ConfirmModal(ModalScreen[None]):
     """
     A modal screen for confirmation actions.
-
-    .. note::
-        If you modify features, API, or usage, you MUST update the documentation immediately.
     """
 
     BINDINGS = [
@@ -65,11 +59,15 @@ class ConfirmModal(ModalScreen[None]):
                 yield Button("No (n)", variant="error", id="no_btn")
 
     def action_close(self) -> None:
-        """Close the modal without confirming."""
+        """
+        Close the modal without confirming.
+        """
         self.app.pop_screen()
 
     def action_confirm(self) -> None:
-        """Confirm the action and call the callback."""
+        """
+        Confirm the action and call the callback.
+        """
         self.callback()
         self.app.pop_screen()
 

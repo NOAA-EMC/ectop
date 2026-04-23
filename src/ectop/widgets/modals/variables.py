@@ -4,12 +4,11 @@
 # #############################################################################
 """
 Modal screen for viewing and editing ecFlow variables.
-
-.. note::
-    If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from textual import work
 from textual.app import ComposeResult
@@ -18,7 +17,6 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Input, Static
 
-from ectop.client import EcflowClient
 from ectop.constants import (
     INHERITED_VAR_PREFIX,
     VAR_TYPE_GENERATED,
@@ -26,13 +24,13 @@ from ectop.constants import (
     VAR_TYPE_USER,
 )
 
+if TYPE_CHECKING:
+    from ectop.client import EcflowClient
+
 
 class VariableTweaker(ModalScreen[None]):
     """
     A modal screen for managing ecFlow node variables.
-
-    .. note::
-        If you modify features, API, or usage, you MUST update the documentation immediately.
     """
 
     BINDINGS = [
@@ -49,13 +47,9 @@ class VariableTweaker(ModalScreen[None]):
         Parameters
         ----------
         node_path : str
-            The absolute path to the ecFlow node.
+            Absolute node path.
         client : EcflowClient
-            The ecFlow client instance.
-
-        Returns
-        -------
-        None
+            Client instance.
         """
         super().__init__()
         self.node_path: str = node_path
@@ -64,12 +58,12 @@ class VariableTweaker(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         """
-        Compose the modal UI.
+        Compose UI.
 
         Returns
         -------
         ComposeResult
-            The UI components for the modal.
+            UI components.
         """
         with Vertical(id="var_container"):
             yield Static(f"Variables for {self.node_path}", id="var_title")
@@ -80,11 +74,7 @@ class VariableTweaker(ModalScreen[None]):
 
     def on_mount(self) -> None:
         """
-        Handle the mount event to initialize the table.
-
-        Returns
-        -------
-        None
+        Handle mount event.
         """
         table = self.query_one("#var_table", DataTable)
         table.add_columns("Name", "Value", "Type")
@@ -94,26 +84,18 @@ class VariableTweaker(ModalScreen[None]):
 
     def action_close(self) -> None:
         """
-        Close the modal.
-
-        Returns
-        -------
-        None
+        Close modal.
         """
         self.app.pop_screen()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """
-        Handle button press events.
+        Handle button press.
 
         Parameters
         ----------
         event : Button.Pressed
-            The button press event.
-
-        Returns
-        -------
-        None
+            Button press event.
         """
         if event.button.id == "close_btn":
             self.app.pop_screen()
@@ -121,34 +103,7 @@ class VariableTweaker(ModalScreen[None]):
     @work()
     async def refresh_vars(self) -> None:
         """
-        Fetch variables from the server and refresh the table in a background worker.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs async I/O.
-        """
-        await self._refresh_vars_logic()
-
-    async def _refresh_vars_logic(self) -> None:
-        """
-        The actual logic for fetching variables and updating the UI.
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        RuntimeError
-            If server synchronization fails.
-
-        Notes
-        -----
-        This method can be called directly for testing.
+        Worker to refresh variables from server.
         """
         try:
             await self.client.sync_local()
@@ -164,21 +119,17 @@ class VariableTweaker(ModalScreen[None]):
             rows: list[tuple[str, str, str, str]] = []
             seen_vars: set[str] = set()
 
-            # User variables
             for var in node.variables:
                 rows.append((var.name(), var.value(), VAR_TYPE_USER, var.name()))
                 seen_vars.add(var.name())
 
-            # Generated variables
             for var in node.get_generated_variables():
                 rows.append((var.name(), var.value(), VAR_TYPE_GENERATED, var.name()))
                 seen_vars.add(var.name())
 
-            # Inherited variables (climb up the tree)
             parent = node.get_parent()
             while parent:
                 for var in parent.variables:
-                    # Only add if not already present (overridden)
                     if var.name() not in seen_vars:
                         rows.append(
                             (
@@ -200,16 +151,12 @@ class VariableTweaker(ModalScreen[None]):
 
     def _update_table(self, rows: list[tuple[str, str, str, str]]) -> None:
         """
-        Update the DataTable with new rows.
+        Update table UI.
 
         Parameters
         ----------
-        rows : list[tuple[str, str, str, str]]
-            The rows to add to the table.
-
-        Returns
-        -------
-        None
+        rows : list
+            Rows to add.
         """
         table = self.query_one("#var_table", DataTable)
         table.clear()
@@ -218,20 +165,16 @@ class VariableTweaker(ModalScreen[None]):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """
-        Handle row selection to start editing a variable.
+        Handle row selection.
 
         Parameters
         ----------
         event : DataTable.RowSelected
-            The row selection event.
-
-        Returns
-        -------
-        None
+            Selection event.
         """
         row_key = event.row_key.value
         if row_key and row_key.startswith(INHERITED_VAR_PREFIX):
-            self.app.notify("Cannot edit inherited variables directly. Add it to this node to override.", severity="warning")
+            self.app.notify("Cannot edit inherited variables.", severity="warning")
             return
 
         self.selected_var_name = row_key
@@ -241,16 +184,12 @@ class VariableTweaker(ModalScreen[None]):
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """
-        Handle variable submission (add or update).
+        Handle input submission.
 
         Parameters
         ----------
         event : Input.Submitted
-            The input submission event.
-
-        Returns
-        -------
-        None
+            Submission event.
         """
         if event.input.id == "var_input":
             self._submit_variable_worker(event.value)
@@ -258,62 +197,28 @@ class VariableTweaker(ModalScreen[None]):
     @work()
     async def _submit_variable_worker(self, value: str) -> None:
         """
-        Worker to submit a new or updated variable in a background thread.
+        Worker to submit variable change.
 
         Parameters
         ----------
         value : str
-            The new value or 'name=value' string.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs async I/O.
-        """
-        await self._submit_variable_logic(value)
-
-    async def _submit_variable_logic(self, value: str) -> None:
-        """
-        The actual logic for submitting a variable update or addition.
-
-        Parameters
-        ----------
-        value : str
-            The new value or 'name=value' string.
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        RuntimeError
-            If the server alteration fails.
-
-        Notes
-        -----
-        This method can be called directly for testing.
+            New value.
         """
         try:
             if self.selected_var_name:
-                # Editing existing
                 await self.client.alter(self.node_path, "add_variable", self.selected_var_name, value)
                 self.app.notify(f"Updated {self.selected_var_name}")
             else:
-                # Adding new (expecting name=value)
                 if "=" in value:
                     name, val = value.split("=", 1)
                     await self.client.alter(self.node_path, "add_variable", name.strip(), val.strip())
                     self.app.notify(f"Added {name.strip()}")
                 else:
-                    self.app.notify("Use name=value format to add", severity="warning")
+                    self.app.notify("Use name=value format", severity="warning")
                     return
 
             self._reset_input()
-            await self.refresh_vars()
+            self.refresh_vars()
         except RuntimeError as e:
             self.app.notify(f"Error: {e}", severity="error")
         except Exception as e:
@@ -321,25 +226,16 @@ class VariableTweaker(ModalScreen[None]):
 
     def _reset_input(self) -> None:
         """
-        Reset the input field state.
-
-        Returns
-        -------
-        None
+        Reset input UI.
         """
         input_field = self.query_one("#var_input", Input)
         input_field.add_class("hidden")
         input_field.value = ""
-        input_field.placeholder = "Enter new value..."
         self.query_one("#var_table").focus()
 
     def action_add_variable(self) -> None:
         """
-        Show the input field to add a new variable.
-
-        Returns
-        -------
-        None
+        Start adding a variable.
         """
         input_field = self.query_one("#var_input", Input)
         input_field.placeholder = "Enter name=value to add"
@@ -349,16 +245,11 @@ class VariableTweaker(ModalScreen[None]):
 
     def action_delete_variable(self) -> None:
         """
-        Delete the selected variable from the server.
-
-        Returns
-        -------
-        None
+        Delete selected variable.
         """
         table = self.query_one("#var_table", DataTable)
         row_index = table.cursor_row
         if row_index is not None:
-            # Get row key from the index
             row_keys = list(table.rows.keys())
             row_key = row_keys[row_index].value
             if row_key:
@@ -367,44 +258,12 @@ class VariableTweaker(ModalScreen[None]):
     @work()
     async def _delete_variable_worker(self, row_key: str) -> None:
         """
-        Worker to delete a variable from the server in a background thread.
+        Worker to delete variable.
 
         Parameters
         ----------
         row_key : str
-            The name (or key) of the variable to delete.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs async I/O.
-        """
-        await self._delete_variable_logic(row_key)
-
-    async def _delete_variable_logic(self, row_key: str) -> None:
-        """
-        The actual logic for deleting a variable.
-
-        Parameters
-        ----------
-        row_key : str
-            The name (or key) of the variable to delete.
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        RuntimeError
-            If the server alteration fails.
-
-        Notes
-        -----
-        This method can be called directly for testing.
+            Variable name.
         """
         if row_key.startswith(INHERITED_VAR_PREFIX):
             self.app.notify("Cannot delete inherited variables", severity="error")
@@ -413,8 +272,6 @@ class VariableTweaker(ModalScreen[None]):
         try:
             await self.client.alter(self.node_path, "delete_variable", row_key)
             self.app.notify(f"Deleted {row_key}")
-            await self.refresh_vars()
+            self.refresh_vars()
         except RuntimeError as e:
             self.app.notify(f"Error: {e}", severity="error")
-        except Exception as e:
-            self.app.notify(f"Unexpected Error: {e}", severity="error")

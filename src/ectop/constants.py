@@ -4,9 +4,6 @@
 # #############################################################################
 """
 Constants for the ectop application.
-
-.. note::
-    If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
 from __future__ import annotations
