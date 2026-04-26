@@ -119,17 +119,24 @@ def test_load_children_worker(mock_defs: MagicMock) -> None:
     ui_node = MagicMock()
     ui_node.data = "/s2"
 
-    with patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop, patch.object(SuiteTree, "_add_node_to_ui"):
+    with (
+        patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop,
+        patch.object(SuiteTree, "_add_nodes_batch"),
+    ):
         mock_app = MagicMock()
+        # Mock _thread_id to simulate being on a different thread
+        mock_app._thread_id = -1
         mock_app_prop.return_value = mock_app
+
         tree._load_children_worker(ui_node, "/s2")
 
-        # Should have called call_from_thread with _add_node_to_ui and task2a
+        # Should have called call_from_thread with _add_nodes_batch
         mock_app.call_from_thread.assert_called_once()
         args, _ = mock_app.call_from_thread.call_args
-        assert args[0] == tree._add_node_to_ui
+        assert args[0] == tree._add_nodes_batch
         assert args[1] == ui_node
-        assert args[2].name() == "t2a"
+        assert len(args[2]) == 1
+        assert args[2][0].name() == "t2a"
 
 
 def test_select_by_path(mock_defs: MagicMock) -> None:
@@ -262,4 +269,9 @@ def test_populate_tree_worker(mock_defs: MagicMock) -> None:
 
     with patch.object(tree, "_should_show_node", return_value=True), patch.object(tree, "_safe_call") as mock_safe:
         tree._populate_tree_worker()
-        assert mock_safe.call_count == len(mock_defs.suites)
+        # Should be 1 call to _add_nodes_batch for 2 suites (batch size 50)
+        assert mock_safe.call_count == 1
+        args, _ = mock_safe.call_args
+        assert args[0] == tree._add_nodes_batch
+        assert args[1] == tree.root
+        assert len(args[2]) == 2
