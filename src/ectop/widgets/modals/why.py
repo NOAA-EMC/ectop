@@ -240,7 +240,9 @@ class WhyInspector(ModalScreen[None]):
             if inlimits:
                 limit_root = DepData("Limits")
                 for il in inlimits:
-                    limit_root.children.append(DepData(f"Limit: {il.name()} (Path: {il.value()})", icon="🔒"))
+                    path = il.path_to_node()
+                    tokens = il.tokens()
+                    limit_root.children.append(DepData(f"Limit: {il.name()} (Path: {path}, Tokens: {tokens})", icon="🔒"))
                 root.children.append(limit_root)
         except (AttributeError, RuntimeError):
             pass

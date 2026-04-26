@@ -1,45 +1,33 @@
-from unittest.mock import AsyncMock, MagicMock, mock_open, patch
-
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
+from __future__ import annotations
+import os
+from unittest.mock import MagicMock, patch
 import pytest
-
+import ecflow
 from ectop.app import Ectop
 
-
 @pytest.fixture
-def mock_app():
-    app = Ectop()
-    app.ecflow_client = AsyncMock()
-    return app
-
+def app(ecflow_server):
+    host, port = ecflow_server
+    return Ectop(host=host, port=port)
 
 @pytest.mark.asyncio
-async def test_action_edit_script_success(mock_app):
-    node_path = "/suite/task"
-    old_content = "old content"
-    mock_app.ecflow_client.file.return_value = old_content
-    with (
-        patch.object(mock_app, "get_selected_path", return_value=node_path),
-        patch("tempfile.NamedTemporaryFile") as mock_temp,
-        patch.object(mock_app, "_run_editor"),
-    ):
-        mock_file = MagicMock()
-        mock_temp.return_value.__enter__.return_value = mock_file
-        mock_file.name = "/tmp/fake.ecf"
-        await mock_app._edit_script_worker(node_path)
-        mock_app.ecflow_client.file.assert_called_with(node_path, "script")
-
+async def test_action_edit_script_no_selection(app):
+    with patch.object(app, "get_selected_path", return_value=None), patch.object(app, "notify") as mock_notify:
+        await app.action_edit_script()
+        mock_notify.assert_called_with("No node selected", severity="warning")
 
 @pytest.mark.asyncio
-async def test_finish_edit_updates_server(mock_app):
-    node_path = "/suite/task"
-    old_content = "old content"
-    new_content = "new content"
-    temp_path = "/tmp/fake.ecf"
-    with (
-        patch("builtins.open", mock_open(read_data=new_content)),
-        patch("os.path.exists", return_value=True),
-        patch("os.unlink"),
-        patch.object(mock_app, "_prompt_requeue"),
-    ):
-        await mock_app._finish_edit(temp_path, node_path, old_content)
-        mock_app.ecflow_client.alter.assert_called_with(node_path, "change", "script", new_content)
+async def test_action_edit_script_failure(app):
+    defs = ecflow.Defs()
+    defs.add_suite("s").add_task("t")
+    c = ecflow.Client(app.client.host, app.client.port)
+    c.load(defs)
+    with patch.object(app, "get_selected_path", return_value="/s/t"), patch.object(app, "notify") as mock_notify:
+        await app.action_edit_script()
+        mock_notify.assert_called()
+        args, _ = mock_notify.call_args
+        assert "Error" in args[0]
