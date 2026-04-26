@@ -251,13 +251,13 @@ class WhyInspector(ModalScreen[None]):
         try:
             time_root = DepData("Time Dependencies")
             has_time = False
-            for t in node.get_times():
+            for t in node.times:
                 time_root.children.append(DepData(f"Time: {t}", icon=ICON_TIME))
                 has_time = True
-            for d in node.get_dates():
+            for d in node.dates:
                 time_root.children.append(DepData(f"Date: {d}", icon=ICON_DATE))
                 has_time = True
-            for c in node.get_crons():
+            for c in node.crons:
                 time_root.children.append(DepData(f"Cron: {c}", icon=ICON_CRON))
                 has_time = True
             if has_time:
