@@ -2,11 +2,13 @@
 # WARNING: If you modify features, API, or usage, you MUST update the
 # documentation immediately.
 # #############################################################################
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
+
 import ecflow
 import pytest
-from rich.text import Text
+
 from ectop.widgets.sidebar import SuiteTree
+
 
 @pytest.fixture
 def real_defs():
@@ -14,6 +16,7 @@ def real_defs():
     defs.add_suite("s1")
     defs.add_suite("s2").add_task("t2a")
     return defs
+
 
 def test_update_tree(real_defs):
     tree = SuiteTree("Test")
@@ -24,6 +27,7 @@ def test_update_tree(real_defs):
         tree.clear.assert_called_once()
         assert tree.defs == real_defs
         mock_worker.assert_called_once()
+
 
 def test_should_show_node(real_defs):
     tree = SuiteTree("Test")

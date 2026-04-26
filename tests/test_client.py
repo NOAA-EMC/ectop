@@ -2,9 +2,9 @@
 # WARNING: If you modify features, API, or usage, you MUST update the
 # documentation immediately.
 # #############################################################################
+
 import ecflow
 import pytest
-import os
 
 from ectop.client import EcflowClient
 

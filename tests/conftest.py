@@ -1,12 +1,15 @@
 from __future__ import annotations
+
+import asyncio
 import os
 import socket
 import subprocess
 import time
-import pytest
 from functools import wraps
-import asyncio
+
+import pytest
 import textual
+
 
 def mock_work(*args, **kwargs):
     def decorator(f):
@@ -23,15 +26,20 @@ def mock_work(*args, **kwargs):
                 except RuntimeError:
                     return asyncio.run(result)
             return result
+
         return wrapper
+
     if len(args) == 1 and callable(args[0]):
         return decorator(args[0])
     return decorator
 
+
 textual.work = mock_work
+
 
 def get_free_port() -> int:
     import random
+
     while True:
         port = random.randint(1024, 49151)
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -40,6 +48,7 @@ def get_free_port() -> int:
                 return port
             except OSError:
                 continue
+
 
 @pytest.fixture(scope="session")
 def ecflow_server():
@@ -52,6 +61,7 @@ def ecflow_server():
     env["ECF_PORT"] = str(port)
     env["ECF_HOME"] = ecf_home
     import sys
+
     ecflow_server_bin = os.path.join(os.path.dirname(sys.executable), "ecflow_server")
     if not os.path.exists(ecflow_server_bin):
         ecflow_server_bin = "ecflow_server"
@@ -64,10 +74,11 @@ def ecflow_server():
     )
 
     import ecflow
+
     client = ecflow.Client(host, port)
     max_retries = 10
     success = False
-    for i in range(max_retries):
+    for _i in range(max_retries):
         try:
             client.ping()
             success = True
@@ -84,5 +95,6 @@ def ecflow_server():
     server_proc.terminate()
     server_proc.wait()
     import shutil
+
     if os.path.exists(ecf_home):
         shutil.rmtree(ecf_home)

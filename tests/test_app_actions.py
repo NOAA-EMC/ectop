@@ -3,21 +3,27 @@
 # documentation immediately.
 # #############################################################################
 from __future__ import annotations
-from unittest.mock import AsyncMock, MagicMock, patch
-import pytest
+
+from unittest.mock import AsyncMock, patch
+
 import ecflow
+import pytest
+
 from ectop.app import Ectop
+
 
 @pytest.fixture
 def app(ecflow_server):
     host, port = ecflow_server
     return Ectop(host=host, port=port)
 
+
 @pytest.mark.asyncio
 async def test_action_restart_server(app):
     with patch.object(app, "action_refresh", new_callable=AsyncMock) as mock_refresh:
         await app.action_restart_server()
         mock_refresh.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_run_client_command_success(app):

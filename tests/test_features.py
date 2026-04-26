@@ -3,8 +3,11 @@
 # documentation immediately.
 # #############################################################################
 from unittest.mock import MagicMock, PropertyMock, patch
+
 import ecflow
+
 from ectop.widgets.sidebar import SuiteTree
+
 
 def test_search_logic() -> None:
     with patch("textual.widgets.Tree._clear_line_cache"):

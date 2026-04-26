@@ -3,22 +3,27 @@
 # documentation immediately.
 # #############################################################################
 from __future__ import annotations
-import os
-from unittest.mock import MagicMock, patch
-import pytest
+
+from unittest.mock import patch
+
 import ecflow
+import pytest
+
 from ectop.app import Ectop
+
 
 @pytest.fixture
 def app(ecflow_server):
     host, port = ecflow_server
     return Ectop(host=host, port=port)
 
+
 @pytest.mark.asyncio
 async def test_action_edit_script_no_selection(app):
     with patch.object(app, "get_selected_path", return_value=None), patch.object(app, "notify") as mock_notify:
         await app.action_edit_script()
         mock_notify.assert_called_with("No node selected", severity="warning")
+
 
 @pytest.mark.asyncio
 async def test_action_edit_script_failure(app):
