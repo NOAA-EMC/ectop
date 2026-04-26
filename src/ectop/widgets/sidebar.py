@@ -139,22 +139,21 @@ class SuiteTree(Tree[str]):
 
     @work(thread=True)
     def _populate_tree_worker(self) -> None:
-        """
-        Worker to populate the tree root with suites in a background thread.
+        """Worker to populate the tree root with suites in a background thread.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs recursive filtering.
+        Notes:
+            This is a background worker that performs recursive filtering.
         """
         if not self.defs:
             return
+
+        batch: list[tuple[TreeNode[str], ecflow.Node]] = []
         for suite in cast("list[ecflow.Suite]", self.defs.suites):
             if self._should_show_node(suite):
-                self._safe_call(self._add_node_to_ui, self.root, suite)
+                batch.append((self.root, suite))
+
+        if batch:
+            self._safe_call(self._add_nodes_batch, batch)
 
     def _should_show_node(self, node: Node) -> bool:
         """
@@ -220,6 +219,15 @@ class SuiteTree(Tree[str]):
         self.current_filter = self.filters[next_idx]
 
         self.app.notify(f"Filter: {self.current_filter or 'All'}")
+
+    def _add_nodes_batch(self, batch: list[tuple[TreeNode[str], ecflow.Node]]) -> None:
+        """Add multiple ecflow nodes to the UI tree in a single batch.
+
+        Args:
+            batch: A list of tuples, each containing a parent UI node and the ecFlow node to add.
+        """
+        for parent, node in batch:
+            self._add_node_to_ui(parent, node)
 
     def _add_node_to_ui(self, parent_ui_node: TreeNode[str], ecflow_node: ecflow.Node) -> TreeNode[str]:
         """
@@ -326,32 +334,32 @@ class SuiteTree(Tree[str]):
 
     @work(thread=True)
     def _load_children_worker(self, ui_node: TreeNode[str], node_path: str) -> None:
-        """
-        Worker to load children nodes in a background thread.
+        """Worker to load children nodes in a background thread.
 
-        Parameters
-        ----------
-        ui_node : TreeNode[str]
-            The UI node to populate.
-        node_path : str
-            The absolute path of the ecFlow node.
+        Args:
+            ui_node: The UI node to populate.
+            node_path: The absolute path of the ecFlow node.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        UI updates are scheduled back to the main thread using `call_from_thread`.
+        Notes:
+            UI updates are scheduled back to the main thread using `_safe_call`.
         """
         if not self.defs:
             return
 
         ecflow_node = self.defs.find_abs_node(node_path)
         if ecflow_node and hasattr(ecflow_node, "nodes"):
+            batch: list[tuple[TreeNode[str], ecflow.Node]] = []
             for child in cast("list[ecflow.Node]", ecflow_node.nodes):
                 if self._should_show_node(child):
-                    self.app.call_from_thread(self._add_node_to_ui, ui_node, child)
+                    batch.append((ui_node, child))
+
+                # Use a batch size of 50 as per plan
+                if len(batch) >= 50:
+                    self.app.call_from_thread(self._add_nodes_batch, batch)
+                    batch = []
+
+            if batch:
+                self.app.call_from_thread(self._add_nodes_batch, batch)
 
     @work(exclusive=True, thread=True)
     def find_and_select(self, query: str) -> None:

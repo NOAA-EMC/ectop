@@ -12,6 +12,7 @@ ecFlow Client Wrapper for ectop.
 from __future__ import annotations
 
 import asyncio
+import threading
 from typing import TYPE_CHECKING
 
 import ecflow
@@ -46,6 +47,7 @@ class EcflowClient:
         """
         self.host: str = host
         self.port: int = port
+        self._lock: threading.Lock = threading.Lock()
         try:
             self.client: ecflow.Client = ecflow.Client(host, port)
         except RuntimeError as e:
@@ -90,7 +92,8 @@ class EcflowClient:
             # we'd need to return the Defs from here or handle it differently.
             # For now, let's stick to using the persistent client for stateful operations
             # but wrap it in to_thread.
-            self.client.sync_local()
+            with self._lock:
+                self.client.sync_local()
 
         try:
             await asyncio.to_thread(_sync)
@@ -109,7 +112,8 @@ class EcflowClient:
         """
 
         def _get_defs() -> Defs | None:
-            return self.client.get_defs()
+            with self._lock:
+                return self.client.get_defs()
 
         try:
             return await asyncio.to_thread(_get_defs)
@@ -313,7 +317,8 @@ class EcflowClient:
         """
 
         def _version() -> str:
-            return str(self.client.version())
+            with self._lock:
+                return str(self.client.version())
 
         try:
             return await asyncio.to_thread(_version)
