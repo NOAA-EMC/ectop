@@ -45,6 +45,10 @@ def mock_defs() -> MagicMock:
     suite2.nodes = [task2a]
     suite2.get_all_nodes.return_value = [task2a]
 
+    suite1.get_parent.return_value = None
+    suite2.get_parent.return_value = None
+    task2a.get_parent.return_value = suite2
+
     defs.suites = [suite1, suite2]
     defs.find_abs_node.side_effect = lambda p: {"/s1": suite1, "/s2": suite2, "/s2/t2a": task2a}.get(p)
 
@@ -64,8 +68,8 @@ def test_update_tree(mock_defs: MagicMock) -> None:
     tree.clear = MagicMock()
     tree.root = MagicMock()
 
-    # Mock _add_node_to_ui and _populate_tree_worker to avoid Textual internals and threading
-    with patch.object(SuiteTree, "_add_node_to_ui"), patch.object(SuiteTree, "_populate_tree_worker") as mock_worker:
+    # Mock _add_node_to_ui and _build_caches_and_populate to avoid Textual internals and threading
+    with patch.object(SuiteTree, "_add_node_to_ui"), patch.object(SuiteTree, "_build_caches_and_populate") as mock_worker:
         tree.update_tree("localhost", 3141, mock_defs)
 
         tree.clear.assert_called_once()
@@ -200,8 +204,10 @@ def test_find_and_select_caching(mock_defs: MagicMock) -> None:
             patch.object(SuiteTree, "_select_by_path_logic") as mock_select_logic,
             patch.object(SuiteTree, "_add_node_to_ui"),
         ):
+            # Manually trigger cache build for logic test
+            tree._build_caches_and_populate()
+
             tree._find_and_select_logic("t2a")
-            assert hasattr(tree, "_all_paths_cache")
             assert tree._all_paths_cache is not None
             assert "/s2/t2a" in tree._all_paths_cache
             # mock_select_logic should be called
@@ -221,9 +227,14 @@ def test_find_and_select_caching(mock_defs: MagicMock) -> None:
 def test_should_show_node(mock_defs: MagicMock) -> None:
     """Test the filtering logic for nodes."""
     tree = SuiteTree("Test")
+    tree.defs = mock_defs
+    tree.filters = [None, "complete", "active", "queued"]
     suite1 = mock_defs.suites[0]  # complete
     suite2 = mock_defs.suites[1]  # active
     task2a = suite2.nodes[0]  # queued
+
+    # Pre-build cache
+    tree._build_caches_and_populate()
 
     # No filter
     tree.current_filter = None
