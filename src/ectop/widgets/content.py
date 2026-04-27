@@ -119,16 +119,10 @@ class MainContent(Vertical):
         content : str
             The new log content.
         """
-        widget = self.query_one("#log_output", RichLog)
-        self._content_cache["output"] = content
-        # Check if this is an append or a full refresh.
-        # Simple heuristic: if content starts with old content, it might be an append.
-        # But for robustness, we just clear and rewrite unless specifically asked.
-        # Since reactive doesn't easily support 'append' flag, we'll keep update_log
-        # for append operations but use reactive for full updates.
-        widget.clear()
-        self.last_log_size = len(content)
-        widget.write(content)
+        if content == self._content_cache.get("output"):
+            return
+
+        self.update_log(content, append=False)
 
     def watch_script_content(self, content: str) -> None:
         """
@@ -139,6 +133,9 @@ class MainContent(Vertical):
         content : str
             The new script content.
         """
+        if content == self._content_cache.get("script"):
+            return
+
         self._content_cache["script"] = content
         widget = self.query_one("#view_script", Static)
         syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
@@ -153,6 +150,9 @@ class MainContent(Vertical):
         content : str
             The new job content.
         """
+        if content == self._content_cache.get("job"):
+            return
+
         self._content_cache["job"] = content
         widget = self.query_one("#view_job", Static)
         syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
@@ -167,16 +167,24 @@ class MainContent(Vertical):
         content : str
             The content to display or append.
         append : bool, optional
-            Whether to append to existing content, by default False.
+            Whether to attempt appending to existing content, by default False.
         """
-        if not append:
-            self.log_content = content
-        else:
-            widget = self.query_one("#log_output", RichLog)
+        widget = self.query_one("#log_output", RichLog)
+
+        # Check if we can actually append
+        actual_append = append and content.startswith(self._content_cache.get("output", ""))
+
+        if not actual_append:
+            widget.clear()
+            self.last_log_size = 0
             self._content_cache["output"] = content
+            widget.write(content)
+            self.last_log_size = len(content)
+        else:
             new_content = content[self.last_log_size :]
             if new_content:
                 widget.write(new_content)
+                self._content_cache["output"] = content
                 self.last_log_size = len(content)
 
     def update_script(self, content: str) -> None:

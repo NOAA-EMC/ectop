@@ -19,5 +19,6 @@ This section contains the automatically generated API documentation for `ectop`.
 ## Modals
 
 ::: ectop.widgets.modals.confirm
+::: ectop.widgets.modals.load
 ::: ectop.widgets.modals.variables
 ::: ectop.widgets.modals.why

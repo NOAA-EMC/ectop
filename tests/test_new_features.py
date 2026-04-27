@@ -65,15 +65,22 @@ def test_suite_tree_filtering() -> None:
     # Mock node structure
     suite = MagicMock()
     suite.get_state.return_value = "complete"
+    suite.get_abs_node_path.return_value = "/suite"
+    suite.get_parent.return_value = None
 
     task1 = MagicMock()
     task1.get_state.return_value = "aborted"
+    task1.get_abs_node_path.return_value = "/suite/task1"
+    task1.get_parent.return_value = suite
     task1.nodes = []
 
     suite.nodes = [task1]
+    suite.get_all_nodes.return_value = [task1]
     mock_defs.suites = [suite]
 
     tree.defs = mock_defs
+    tree.filters = [None, "aborted", "active"]
+    tree._build_caches_and_populate()
 
     # Test _should_show_node
     tree.current_filter = "aborted"

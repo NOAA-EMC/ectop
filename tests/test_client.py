@@ -27,9 +27,9 @@ async def test_client_ping_success():
     with patch("ectop.client.ecflow.Client") as mock_client:
         client = EcflowClient()
         await client.ping()
-        # Since we use a new client instance in ping, we check if a second Client was created
-        assert mock_client.call_count == 2
-        # And if ping was called on that second instance
+        # Since we use a persistent client instance, we check if only one Client was created
+        assert mock_client.call_count == 1
+        # And if ping was called on that instance
         mock_client.return_value.ping.assert_called_once()
 
 
@@ -37,7 +37,6 @@ async def test_client_ping_success():
 async def test_client_ping_failure():
     with patch("ectop.client.ecflow.Client") as mock_client:
         client = EcflowClient()
-        # The second client created in ping will raise the error
         mock_client.return_value.ping.side_effect = RuntimeError("Connection refused")
         with pytest.raises(RuntimeError, match="Failed to ping ecFlow server"):
             await client.ping()
@@ -242,3 +241,37 @@ async def test_client_server_control_failures():
         mock_client.return_value.halt_server.side_effect = RuntimeError("fail")
         with pytest.raises(RuntimeError, match="Failed to halt server"):
             await client.halt_server()
+
+
+@pytest.mark.asyncio
+async def test_client_load_defs_success():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+        await client.load_defs("test.def")
+        mock_client.return_value.load.assert_called_with("test.def")
+
+
+@pytest.mark.asyncio
+async def test_client_load_defs_failure():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+        mock_client.return_value.load.side_effect = RuntimeError("Load error")
+        with pytest.raises(RuntimeError, match="Failed to load definition file test.def"):
+            await client.load_defs("test.def")
+
+
+@pytest.mark.asyncio
+async def test_client_begin_suite_success():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+        await client.begin_suite("test_suite")
+        mock_client.return_value.begin_suite.assert_called_with("test_suite")
+
+
+@pytest.mark.asyncio
+async def test_client_begin_suite_failure():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+        mock_client.return_value.begin_suite.side_effect = RuntimeError("Begin error")
+        with pytest.raises(RuntimeError, match="Failed to begin suite test_suite"):
+            await client.begin_suite("test_suite")

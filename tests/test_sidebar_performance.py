@@ -40,9 +40,9 @@ def test_load_children_worker_batching() -> None:
         assert mock_app.call_from_thread.call_count == 3
 
         calls = mock_app.call_from_thread.call_args_list
-        assert len(calls[0][0][1]) == 50
-        assert len(calls[1][0][1]) == 50
-        assert len(calls[2][0][1]) == 25
+        assert len(calls[0][0][2]) == 50
+        assert len(calls[1][0][2]) == 50
+        assert len(calls[2][0][2]) == 25
 
         for call in calls:
             assert call[0][0] == tree._add_nodes_batch

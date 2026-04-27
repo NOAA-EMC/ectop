@@ -30,6 +30,7 @@ def mock_defs() -> MagicMock:
     suite1.get_abs_node_path.return_value = "/s1"
     suite1.get_state.return_value = "complete"
     suite1.nodes = []
+    suite1.get_all_nodes.return_value = []
 
     suite2 = MagicMock()
     suite2.name.return_value = "s2"
@@ -41,11 +42,17 @@ def mock_defs() -> MagicMock:
     task2a.get_abs_node_path.return_value = "/s2/t2a"
     task2a.get_state.return_value = "queued"
     task2a.nodes = []
+    task2a.get_all_nodes.return_value = []
 
     suite2.nodes = [task2a]
     suite2.get_all_nodes.return_value = [task2a]
 
+    suite1.get_parent.return_value = None
+    suite2.get_parent.return_value = None
+    task2a.get_parent.return_value = suite2
+
     defs.suites = [suite1, suite2]
+    defs.get_all_nodes.return_value = [suite1, suite2, task2a]
     defs.find_abs_node.side_effect = lambda p: {"/s1": suite1, "/s2": suite2, "/s2/t2a": task2a}.get(p)
 
     return defs
@@ -64,8 +71,8 @@ def test_update_tree(mock_defs: MagicMock) -> None:
     tree.clear = MagicMock()
     tree.root = MagicMock()
 
-    # Mock _add_node_to_ui and _populate_tree_worker to avoid Textual internals and threading
-    with patch.object(SuiteTree, "_add_node_to_ui"), patch.object(SuiteTree, "_populate_tree_worker") as mock_worker:
+    # Mock _add_node_to_ui and _build_caches_and_populate to avoid Textual internals and threading
+    with patch.object(SuiteTree, "_add_node_to_ui"), patch.object(SuiteTree, "_build_caches_and_populate") as mock_worker:
         tree.update_tree("localhost", 3141, mock_defs)
 
         tree.clear.assert_called_once()
@@ -106,7 +113,7 @@ def test_load_children(mock_defs: MagicMock) -> None:
 
 def test_load_children_worker(mock_defs: MagicMock) -> None:
     """
-    Test that the worker correctly schedules node additions in batches.
+    Test that the worker correctly schedules node additions.
 
     Parameters
     ----------
@@ -119,19 +126,24 @@ def test_load_children_worker(mock_defs: MagicMock) -> None:
     ui_node = MagicMock()
     ui_node.data = "/s2"
 
-    with patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop, patch.object(SuiteTree, "_add_nodes_batch"):
+    with (
+        patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop,
+        patch.object(SuiteTree, "_add_nodes_batch"),
+    ):
         mock_app = MagicMock()
+        # Mock _thread_id to simulate being on a different thread
+        mock_app._thread_id = -1
         mock_app_prop.return_value = mock_app
+
         tree._load_children_worker(ui_node, "/s2")
 
         # Should have called call_from_thread with _add_nodes_batch
         mock_app.call_from_thread.assert_called_once()
         args, _ = mock_app.call_from_thread.call_args
         assert args[0] == tree._add_nodes_batch
-        batch = args[1]
-        assert len(batch) == 1
-        assert batch[0][0] == ui_node
-        assert batch[0][1].name() == "t2a"
+        assert args[1] == ui_node
+        assert len(args[2]) == 1
+        assert args[2][0].name() == "t2a"
 
 
 def test_select_by_path(mock_defs: MagicMock) -> None:
@@ -195,8 +207,10 @@ def test_find_and_select_caching(mock_defs: MagicMock) -> None:
             patch.object(SuiteTree, "_select_by_path_logic") as mock_select_logic,
             patch.object(SuiteTree, "_add_node_to_ui"),
         ):
+            # Manually trigger cache build for logic test
+            tree._build_caches_and_populate()
+
             tree._find_and_select_logic("t2a")
-            assert hasattr(tree, "_all_paths_cache")
             assert tree._all_paths_cache is not None
             assert "/s2/t2a" in tree._all_paths_cache
             # mock_select_logic should be called
@@ -216,9 +230,14 @@ def test_find_and_select_caching(mock_defs: MagicMock) -> None:
 def test_should_show_node(mock_defs: MagicMock) -> None:
     """Test the filtering logic for nodes."""
     tree = SuiteTree("Test")
+    tree.defs = mock_defs
+    tree.filters = [None, "complete", "active", "queued"]
     suite1 = mock_defs.suites[0]  # complete
     suite2 = mock_defs.suites[1]  # active
     task2a = suite2.nodes[0]  # queued
+
+    # Pre-build cache
+    tree._build_caches_and_populate()
 
     # No filter
     tree.current_filter = None
@@ -257,16 +276,16 @@ def test_action_cycle_filter() -> None:
 
 
 def test_populate_tree_worker(mock_defs: MagicMock) -> None:
-    """Test the background worker for tree population with batching."""
+    """Test the background worker for tree population."""
     tree = SuiteTree("Test")
     tree.defs = mock_defs
     tree.root = MagicMock()
 
     with patch.object(tree, "_should_show_node", return_value=True), patch.object(tree, "_safe_call") as mock_safe:
         tree._populate_tree_worker()
-        # All suites should be added in a single batch
+        # Should be 1 call to _add_nodes_batch for 2 suites (batch size 50)
         assert mock_safe.call_count == 1
         args, _ = mock_safe.call_args
         assert args[0] == tree._add_nodes_batch
-        batch = args[1]
-        assert len(batch) == len(mock_defs.suites)
+        assert args[1] == tree.root
+        assert len(args[2]) == 2
