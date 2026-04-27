@@ -106,6 +106,12 @@ If you have administrative privileges, you can control the server's scheduling s
 - **Halt Server**: Press `H` (**Shift + H**) to stop the server from scheduling any new tasks. The status bar will show `HALTED`.
 - **Start Server**: Press `S` (**Shift + S**) to resume scheduling. The status bar will show `RUNNING`.
 
+### Loading and Beginning Suites
+`ectop` allows you to load new suite definitions and start their playback directly:
+
+- **Load Defs**: Press `L` (**Shift + L**) to open a modal where you can enter the path to an ecFlow `.def` file.
+- **Begin Suite**: Select a suite node in the tree and press `b` to start its playback (equivalent to `ecflow_client --begin`).
+
 ### The Command Palette
 If you forget a keybinding, press `p` to open the **Command Palette**. This searchable interface allows you to execute any action by name (e.g., type "halt" to find the "Halt Server" command).
 

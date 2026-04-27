@@ -353,3 +353,43 @@ class EcflowClient:
             return await asyncio.to_thread(_server_version)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to get server version: {e}") from e
+
+    async def load_defs(self, filepath: str) -> None:
+        """
+        Load an ecFlow definition file to the server.
+
+        Args:
+            filepath: The path to the .def file.
+
+        Raises:
+            RuntimeError: If the file cannot be loaded.
+        """
+
+        def _load() -> None:
+            client = ecflow.Client(self.host, self.port)
+            client.load(filepath)
+
+        try:
+            await asyncio.to_thread(_load)
+        except RuntimeError as e:
+            raise RuntimeError(f"Failed to load definition file {filepath}: {e}") from e
+
+    async def begin_suite(self, name: str) -> None:
+        """
+        Begin playback of a suite.
+
+        Args:
+            name: The name of the suite to begin.
+
+        Raises:
+            RuntimeError: If the suite cannot be started.
+        """
+
+        def _begin() -> None:
+            client = ecflow.Client(self.host, self.port)
+            client.begin_suite(name)
+
+        try:
+            await asyncio.to_thread(_begin)
+        except RuntimeError as e:
+            raise RuntimeError(f"Failed to begin suite {name}: {e}") from e
