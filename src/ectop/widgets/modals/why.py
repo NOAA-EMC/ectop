@@ -509,6 +509,27 @@ class WhyInspector(ModalScreen[None]):
             self._add_to_tree(tree.root, child)
         tree.root.expand_all()
 
+    def _add_to_tree(self, parent_node: TreeNode[str], data: DepData) -> None:
+        """
+        Recursively add DepData to the Textual Tree.
+
+        Parameters
+        ----------
+        parent_node : TreeNode[str]
+            The parent TreeNode.
+        data : DepData
+            The DepData to add.
+
+        Returns
+        -------
+        None
+        """
+        icon = data.icon or (ICON_MET if data.is_met else ICON_NOT_MET)
+        label = f"{icon} {data.label}"
+        new_node = parent_node.add(label, data=data.path, expand=True)
+        for child in data.children:
+            self._add_to_tree(new_node, child)
+
 @lru_cache(maxsize=128)
 def _get_expr_tree(expr_str: str) -> dict:
     """
@@ -576,25 +597,3 @@ def _get_expr_tree(expr_str: str) -> dict:
         }
 
     return {"type": "literal", "value": expr_str}
-
-
-    def _add_to_tree(self, parent_node: TreeNode[str], data: DepData) -> None:
-        """
-        Recursively add DepData to the Textual Tree.
-
-        Parameters
-        ----------
-        parent_node : TreeNode[str]
-            The parent TreeNode.
-        data : DepData
-            The DepData to add.
-
-        Returns
-        -------
-        None
-        """
-        icon = data.icon or (ICON_MET if data.is_met else ICON_NOT_MET)
-        label = f"{icon} {data.label}"
-        new_node = parent_node.add(label, data=data.path, expand=True)
-        for child in data.children:
-            self._add_to_tree(new_node, child)

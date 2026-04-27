@@ -171,6 +171,10 @@ class MainContent(Vertical):
         """
         widget = self.query_one("#log_output", RichLog)
 
+        # Optimization: Return early if content is identical
+        if content == self._content_cache.get("output"):
+            return
+
         # Check if we can actually append
         actual_append = append and content.startswith(self._content_cache.get("output", ""))
 
