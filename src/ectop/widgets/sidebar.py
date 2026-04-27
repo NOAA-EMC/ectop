@@ -137,24 +137,32 @@ class SuiteTree(Tree[str]):
         # Trigger background cache building for search
         self._build_all_paths_cache_worker()
 
-    @work(thread=True)
+    @work(exclusive=True, thread=True)
     def _populate_tree_worker(self) -> None:
         """
         Worker to populate the tree root with suites in a background thread.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker that performs recursive filtering.
+        Notes:
+            This is a background worker that performs recursive filtering.
         """
         if not self.defs:
             return
-        for suite in cast("list[ecflow.Suite]", self.defs.suites):
-            if self._should_show_node(suite):
-                self._safe_call(self._add_node_to_ui, self.root, suite)
+        suites = [s for s in cast("list[ecflow.Suite]", self.defs.suites) if self._should_show_node(s)]
+        batch_size = 50
+        for i in range(0, len(suites), batch_size):
+            batch = suites[i : i + batch_size]
+            self._safe_call(self._add_nodes_batch, self.root, batch)
+
+    def _add_nodes_batch(self, parent_ui_node: TreeNode[str], ecflow_nodes: list[ecflow.Node]) -> None:
+        """
+        Batch add nodes to the UI to reduce main thread pressure.
+
+        Args:
+            parent_ui_node: The parent UI node.
+            ecflow_nodes: List of ecFlow nodes to add.
+        """
+        for ecflow_node in ecflow_nodes:
+            self._add_node_to_ui(parent_ui_node, ecflow_node)
 
     def _should_show_node(self, node: Node) -> bool:
         """
@@ -288,24 +296,12 @@ class SuiteTree(Tree[str]):
         """
         Load children for a UI node if they haven't been loaded yet.
 
-        Parameters
-        ----------
-        ui_node : TreeNode[str]
-            The UI node to load children for.
-        sync : bool, optional
-            Whether to load children synchronously, by default False.
+        Args:
+            ui_node: The UI node to load children for.
+            sync: Whether to load children synchronously. Defaults to False.
 
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        None
-
-        Notes
-        -----
-        Uses `_load_children_worker` for async loading.
+        Notes:
+            Uses `_load_children_worker` for async loading.
         """
         if not ui_node.data or not self.defs:
             return
@@ -319,39 +315,34 @@ class SuiteTree(Tree[str]):
             if sync:
                 ecflow_node = self.defs.find_abs_node(ui_node.data)
                 if ecflow_node and hasattr(ecflow_node, "nodes"):
-                    for child in ecflow_node.nodes:
-                        self._safe_call(self._add_node_to_ui, ui_node, child)
+                    # Use batching even for sync loading to keep implementation consistent
+                    nodes = list(ecflow_node.nodes)
+                    self._safe_call(self._add_nodes_batch, ui_node, nodes)
             else:
                 self._load_children_worker(ui_node, ui_node.data)
 
-    @work(thread=True)
+    @work(exclusive=True, thread=True)
     def _load_children_worker(self, ui_node: TreeNode[str], node_path: str) -> None:
         """
         Worker to load children nodes in a background thread.
 
-        Parameters
-        ----------
-        ui_node : TreeNode[str]
-            The UI node to populate.
-        node_path : str
-            The absolute path of the ecFlow node.
+        Args:
+            ui_node: The UI node to populate.
+            node_path: The absolute path of the ecFlow node.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        UI updates are scheduled back to the main thread using `call_from_thread`.
+        Notes:
+            UI updates are scheduled back to the main thread using `call_from_thread`.
         """
         if not self.defs:
             return
 
         ecflow_node = self.defs.find_abs_node(node_path)
         if ecflow_node and hasattr(ecflow_node, "nodes"):
-            for child in cast("list[ecflow.Node]", ecflow_node.nodes):
-                if self._should_show_node(child):
-                    self.app.call_from_thread(self._add_node_to_ui, ui_node, child)
+            children = [c for c in cast("list[ecflow.Node]", ecflow_node.nodes) if self._should_show_node(c)]
+            batch_size = 50
+            for i in range(0, len(children), batch_size):
+                batch = children[i : i + batch_size]
+                self._safe_call(self._add_nodes_batch, ui_node, batch)
 
     @work(exclusive=True, thread=True)
     def find_and_select(self, query: str) -> None:
