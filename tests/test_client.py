@@ -242,3 +242,37 @@ async def test_client_server_control_failures():
         mock_client.return_value.halt_server.side_effect = RuntimeError("fail")
         with pytest.raises(RuntimeError, match="Failed to halt server"):
             await client.halt_server()
+
+
+@pytest.mark.asyncio
+async def test_client_load_defs_success():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+        await client.load_defs("test.def")
+        mock_client.return_value.load.assert_called_with("test.def")
+
+
+@pytest.mark.asyncio
+async def test_client_load_defs_failure():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+        mock_client.return_value.load.side_effect = RuntimeError("Load error")
+        with pytest.raises(RuntimeError, match="Failed to load definition file test.def"):
+            await client.load_defs("test.def")
+
+
+@pytest.mark.asyncio
+async def test_client_begin_suite_success():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+        await client.begin_suite("test_suite")
+        mock_client.return_value.begin_suite.assert_called_with("test_suite")
+
+
+@pytest.mark.asyncio
+async def test_client_begin_suite_failure():
+    with patch("ectop.client.ecflow.Client") as mock_client:
+        client = EcflowClient()
+        mock_client.return_value.begin_suite.side_effect = RuntimeError("Begin error")
+        with pytest.raises(RuntimeError, match="Failed to begin suite test_suite"):
+            await client.begin_suite("test_suite")

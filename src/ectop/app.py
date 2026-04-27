@@ -42,6 +42,7 @@ from ectop.constants import (
     STATUS_SYNC_ERROR,
 )
 from ectop.widgets.content import MainContent
+from ectop.widgets.modals.load import LoadDefsModal
 from ectop.widgets.modals.variables import VariableTweaker
 from ectop.widgets.modals.why import WhyInspector
 from ectop.widgets.search import SearchBox
@@ -81,6 +82,8 @@ class EctopCommands(Provider):
             ("Why?", app.action_why, "Inspect why a node is not running"),
             ("Variables", app.action_variables, "View/Edit node variables"),
             ("Edit Script", app.action_edit_script, "Edit and rerun node script"),
+            ("Begin Suite", app.action_begin, "Begin playback of the selected suite"),
+            ("Load Defs", app.action_load_defs, "Load an ecFlow definition file"),
             ("Restart Server", app.action_restart_server, "Start server scheduling (RUNNING)"),
             ("Halt Server", app.action_halt_server, "Stop server scheduling (HALT)"),
             ("Toggle Live Log", app.action_toggle_live, "Toggle live log updates"),
@@ -245,6 +248,8 @@ class Ectop(App):
         Binding("e", "edit_script", "Edit & Rerun"),
         Binding("t", "toggle_live", "Toggle Live Log"),
         Binding("v", "variables", "Variables"),
+        Binding("b", "begin", "Begin Suite"),
+        Binding("L", "load_defs", "Load Defs"),
         Binding("ctrl+f", "search_content", "Search in Content"),
     ]
 
@@ -599,6 +604,53 @@ class Ectop(App):
             self.notify("No node selected", severity="warning")
             return
         self.push_screen(VariableTweaker(path, self.ecflow_client))
+
+    def action_begin(self) -> None:
+        """
+        Begin playback for the selected suite.
+        """
+        if not self.ecflow_client:
+            return
+
+        path = self.get_selected_path()
+        if not path or path == "/":
+            self.notify("No suite selected", severity="warning")
+            return
+
+        # Check if it's a suite (starts with / and has no more /)
+        if path.count("/") != 1:
+            self.notify("Please select a suite to begin", severity="warning")
+            return
+
+        suite_name = path.strip("/")
+        self._run_client_command("begin_suite", suite_name)
+
+    def action_load_defs(self) -> None:
+        """
+        Show the load definition modal.
+        """
+        if not self.ecflow_client:
+            return
+        self.push_screen(LoadDefsModal())
+
+    @work
+    async def _load_defs_worker(self, filepath: str) -> None:
+        """
+        Worker to load definitions in a background thread.
+
+        Args:
+            filepath: The path to the .def file.
+        """
+        if not self.ecflow_client:
+            return
+        try:
+            await self.ecflow_client.load_defs(filepath)
+            self.notify(f"Loaded: {filepath}")
+            self.action_refresh()
+        except RuntimeError as e:
+            self.notify(f"Load Error: {e}", severity="error")
+        except Exception as e:
+            self.notify(f"Unexpected Error: {e}", severity="error")
 
     def action_search_content(self) -> None:
         """
