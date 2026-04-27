@@ -330,7 +330,8 @@ class WhyInspector(ModalScreen[None]):
                 try:
                     val = getattr(node, attr)
                     times = list(val() if callable(val) else val)
-                    if times: break
+                    if times:
+                        break
                 except (AttributeError, RuntimeError, TypeError):
                     continue
             for t in times:
@@ -342,7 +343,8 @@ class WhyInspector(ModalScreen[None]):
                 try:
                     val = getattr(node, attr)
                     dates = list(val() if callable(val) else val)
-                    if dates: break
+                    if dates:
+                        break
                 except (AttributeError, RuntimeError, TypeError):
                     continue
             for d in dates:
@@ -354,7 +356,8 @@ class WhyInspector(ModalScreen[None]):
                 try:
                     val = getattr(node, attr)
                     crons = list(val() if callable(val) else val)
-                    if crons: break
+                    if crons:
+                        break
                 except (AttributeError, RuntimeError, TypeError):
                     continue
             for c in crons:
