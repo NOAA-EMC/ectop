@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import ecflow
@@ -390,106 +391,102 @@ class WhyInspector(ModalScreen[None]):
             True if the expression is currently met.
         """
         try:
-            expr_str = expr_str.strip()
-            if not expr_str:
-                return True
-
-            # Remove outer parentheses
-            while expr_str.startswith("(") and expr_str.endswith(")"):
-                depth = 0
-                is_pair = True
-                for i, char in enumerate(expr_str):
-                    if char == "(":
-                        depth += 1
-                    elif char == ")":
-                        depth -= 1
-                    if depth == 0 and i < len(expr_str) - 1:
-                        is_pair = False
-                        break
-                if is_pair:
-                    expr_str = expr_str[1:-1].strip()
-                else:
-                    break
-
-            # NOT operator
-            if expr_str.startswith("!"):
-                not_node = DepData("NOT (Must be false)")
-                inner_met = self._parse_expression_data(not_node, expr_str[1:].strip(), defs)
-                is_met = not inner_met
-                not_node.is_met = is_met
-                parent.children.append(not_node)
-                return is_met
-
-            # AND/OR operators
-            for op, label in [(" or ", EXPR_OR_LABEL), (" and ", EXPR_AND_LABEL)]:
-                depth = 0
-                for i in range(len(expr_str)):
-                    if expr_str[i] == "(":
-                        depth += 1
-                    elif expr_str[i] == ")":
-                        depth -= 1
-                    elif depth == 0 and expr_str[i : i + len(op)] == op:
-                        op_node = DepData(label)
-                        left = expr_str[:i].strip()
-                        right = expr_str[i + len(op) :].strip()
-                        is_met_left = self._parse_expression_data(op_node, left, defs)
-                        is_met_right = self._parse_expression_data(op_node, right, defs)
-                        is_met = (is_met_left or is_met_right) if op == " or " else (is_met_left and is_met_right)
-                        op_node.is_met = is_met
-                        parent.children.append(op_node)
-                        return is_met
-
-            # Leaf node
-            match = EXPR_RE.search(expr_str)
-            if match:
-                negation = match.group(1).strip()
-                path = match.group(2)
-                op = match.group(4) or "=="
-                expected_state_str = match.group(5) or "complete"
-                target_node = defs.find_abs_node(path)
-
-                if target_node is not None:
-                    actual_state = target_node.get_state()
-
-                    # For tests where get_state might return a string mock
-                    if isinstance(actual_state, str):
-                        expected_state = expected_state_str
-                    else:
-                        expected_state = self._state_map.get(expected_state_str, ecflow.State.complete)
-
-                    is_met = False
-                    if op == "==":
-                        is_met = actual_state == expected_state
-                    elif op == "!=":
-                        is_met = actual_state != expected_state
-                    elif op == "<":
-                        is_met = actual_state < expected_state
-                    elif op == ">":
-                        is_met = actual_state > expected_state
-                    elif op == "<=":
-                        is_met = actual_state <= expected_state
-                    elif op == ">=":
-                        is_met = actual_state >= expected_state
-
-                    if negation == "!":
-                        is_met = not is_met
-
-                    neg_str = "! " if negation == "!" else ""
-                    label = f"{neg_str}{path} {op} {str(actual_state)} (Expected: {expected_state_str})"
-                    if str(actual_state) == "aborted":
-                        label = f"[b red]{label} (STOPPED HERE)[/]"
-
-                    parent.children.append(DepData(label, path=path, is_met=is_met))
-                    return is_met
-                else:
-                    parent.children.append(DepData(f"{path} (Not found)", is_met=False, icon=ICON_UNKNOWN))
-                    return False
-            else:
-                parent.children.append(DepData(expr_str, icon=ICON_NOTE))
-                return True
+            tree = _get_expr_tree(expr_str)
+            return self._evaluate_expr_tree(parent, tree, defs)
         except Exception as e:
             parent.children.append(DepData(f"Parse Error: {expr_str} ({e})", is_met=False, icon=ICON_NOT_MET))
             return False
+
+    def _evaluate_expr_tree(self, parent: DepData, tree: dict, defs: Defs) -> bool:
+        """
+        Evaluate a parsed expression tree against ecFlow definitions.
+
+        Parameters
+        ----------
+        parent : DepData
+            The parent DepData object.
+        tree : dict
+            The parsed expression tree.
+        defs : Defs
+            The ecFlow definitions for node lookups.
+
+        Returns
+        -------
+        bool
+            True if the expression is currently met.
+        """
+        expr_type = tree["type"]
+
+        if expr_type == "empty":
+            return True
+
+        if expr_type == "not":
+            not_node = DepData("NOT (Must be false)")
+            inner_met = self._evaluate_expr_tree(not_node, tree["child"], defs)
+            is_met = not inner_met
+            not_node.is_met = is_met
+            parent.children.append(not_node)
+            return is_met
+
+        if expr_type in ("and", "or"):
+            label = EXPR_AND_LABEL if expr_type == "and" else EXPR_OR_LABEL
+            op_node = DepData(label)
+            is_met_left = self._evaluate_expr_tree(op_node, tree["left"], defs)
+            is_met_right = self._evaluate_expr_tree(op_node, tree["right"], defs)
+            is_met = (is_met_left and is_met_right) if expr_type == "and" else (is_met_left or is_met_right)
+            op_node.is_met = is_met
+            parent.children.append(op_node)
+            return is_met
+
+        if expr_type == "leaf":
+            negation = tree["negation"]
+            path = tree["path"]
+            op = tree["op"]
+            expected_state_str = tree["expected"]
+            target_node = defs.find_abs_node(path)
+
+            if target_node is not None:
+                actual_state = target_node.get_state()
+
+                # For tests where get_state might return a string mock
+                if isinstance(actual_state, str):
+                    expected_state = expected_state_str
+                else:
+                    expected_state = self._state_map.get(expected_state_str, ecflow.State.complete)
+
+                is_met = False
+                if op == "==":
+                    is_met = actual_state == expected_state
+                elif op == "!=":
+                    is_met = actual_state != expected_state
+                elif op == "<":
+                    is_met = actual_state < expected_state
+                elif op == ">":
+                    is_met = actual_state > expected_state
+                elif op == "<=":
+                    is_met = actual_state <= expected_state
+                elif op == ">=":
+                    is_met = actual_state >= expected_state
+
+                if negation == "!":
+                    is_met = not is_met
+
+                neg_str = "! " if negation == "!" else ""
+                label = f"{neg_str}{path} {op} {str(actual_state)} (Expected: {expected_state_str})"
+                if str(actual_state) == "aborted":
+                    label = f"[b red]{label} (STOPPED HERE)[/]"
+
+                parent.children.append(DepData(label, path=path, is_met=is_met))
+                return is_met
+            else:
+                parent.children.append(DepData(f"{path} (Not found)", is_met=False, icon=ICON_UNKNOWN))
+                return False
+
+        if expr_type == "literal":
+            parent.children.append(DepData(tree["value"], icon=ICON_NOTE))
+            return True
+
+        return True
 
     def _update_tree_ui(self, tree: Tree, data: DepData) -> None:
         """
@@ -511,6 +508,75 @@ class WhyInspector(ModalScreen[None]):
         for child in data.children:
             self._add_to_tree(tree.root, child)
         tree.root.expand_all()
+
+@lru_cache(maxsize=128)
+def _get_expr_tree(expr_str: str) -> dict:
+    """
+    Parse an ecFlow expression string into a tree structure. Cached for performance.
+
+    Parameters
+    ----------
+    expr_str : str
+        The expression string to parse.
+
+    Returns
+    -------
+    dict
+        A dictionary representing the expression tree.
+    """
+    expr_str = expr_str.strip()
+    if not expr_str:
+        return {"type": "empty"}
+
+    # Remove outer parentheses
+    while expr_str.startswith("(") and expr_str.endswith(")"):
+        depth = 0
+        is_pair = True
+        for i, char in enumerate(expr_str):
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            if depth == 0 and i < len(expr_str) - 1:
+                is_pair = False
+                break
+        if is_pair:
+            expr_str = expr_str[1:-1].strip()
+        else:
+            break
+
+    # NOT operator
+    if expr_str.startswith("!"):
+        return {"type": "not", "child": _get_expr_tree(expr_str[1:].strip())}
+
+    # AND/OR operators
+    for op in (" or ", " and "):
+        depth = 0
+        for i in range(len(expr_str)):
+            if expr_str[i] == "(":
+                depth += 1
+            elif expr_str[i] == ")":
+                depth -= 1
+            elif depth == 0 and expr_str[i : i + len(op)] == op:
+                return {
+                    "type": op.strip(),
+                    "left": _get_expr_tree(expr_str[:i].strip()),
+                    "right": _get_expr_tree(expr_str[i + len(op) :].strip()),
+                }
+
+    # Leaf node
+    match = EXPR_RE.search(expr_str)
+    if match:
+        return {
+            "type": "leaf",
+            "negation": match.group(1).strip(),
+            "path": match.group(2),
+            "op": match.group(4) or "==",
+            "expected": match.group(5) or "complete",
+        }
+
+    return {"type": "literal", "value": expr_str}
+
 
     def _add_to_tree(self, parent_node: TreeNode[str], data: DepData) -> None:
         """

@@ -263,7 +263,7 @@ class SuiteTree(Tree[str]):
         bool
             True if the node or any of its descendants match the filter.
         """
-        if not self.current_filter:
+        if self.current_filter is None:
             return True
 
         visible_paths = self._visibility_cache.get(self.current_filter)
@@ -311,7 +311,7 @@ class SuiteTree(Tree[str]):
         state = str(ecflow_node.get_state())
         icon = STATE_MAP.get(state, ICON_UNKNOWN_STATE)
 
-        is_container = isinstance(ecflow_node, ecflow.Family | ecflow.Suite)
+        is_container = isinstance(ecflow_node, (ecflow.Family, ecflow.Suite))
         type_icon = ICON_FAMILY if is_container else ICON_TASK
 
         label = Text(f"{icon} {type_icon} {ecflow_node.name()} ")
