@@ -119,6 +119,9 @@ class MainContent(Vertical):
         content : str
             The new log content.
         """
+        if content == self._content_cache.get("output"):
+            return
+
         widget = self.query_one("#log_output", RichLog)
         self._content_cache["output"] = content
         # Check if this is an append or a full refresh.
@@ -139,6 +142,9 @@ class MainContent(Vertical):
         content : str
             The new script content.
         """
+        if content == self._content_cache.get("script"):
+            return
+
         self._content_cache["script"] = content
         widget = self.query_one("#view_script", Static)
         syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
@@ -153,6 +159,9 @@ class MainContent(Vertical):
         content : str
             The new job content.
         """
+        if content == self._content_cache.get("job"):
+            return
+
         self._content_cache["job"] = content
         widget = self.query_one("#view_job", Static)
         syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)

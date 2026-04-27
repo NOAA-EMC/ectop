@@ -56,6 +56,7 @@ def test_search_logic() -> None:
             with patch.object(SuiteTree, "defs", new_callable=PropertyMock) as mock_defs_prop:
                 mock_defs_prop.return_value = mock_defs
                 tree._all_paths_cache = ["/suite", "/suite/task1", "/suite/post_proc"]
+                tree._search_paths_lower = [p.lower() for p in tree._all_paths_cache]
                 tree._current_filter = None
 
                 # Test substring match

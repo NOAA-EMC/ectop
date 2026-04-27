@@ -37,6 +37,9 @@ from ectop.constants import (
     ICON_UNKNOWN,
 )
 
+# Pre-compile the regex for expression parsing to improve performance
+EXPR_RE = re.compile(r"(!?\s*)(/[a-zA-Z0-9_\-\./]+)(\s*(==|!=|<=|>=|<|>)\s*(\w+))?")
+
 if TYPE_CHECKING:
     from ecflow import Defs, Node
 
@@ -328,7 +331,7 @@ class WhyInspector(ModalScreen[None]):
                         return is_met
 
             # Leaf node
-            match = re.search(r"(!?\s*)(/[a-zA-Z0-9_\-\./]+)(\s*(==|!=|<=|>=|<|>)\s*(\w+))?", expr_str)
+            match = EXPR_RE.search(expr_str)
             if match:
                 negation = match.group(1).strip()
                 path = match.group(2)

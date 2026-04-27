@@ -41,6 +41,7 @@ async def test_search_cache_background_building():
         mock_suite.name = mock.MagicMock(return_value="suite")
         mock_suite.get_all_nodes = mock.MagicMock(return_value=[])
         mock_suite.get_state = mock.MagicMock(return_value="unknown")
+        mock_suite.get_parent.return_value = None
 
         mock_defs.suites = [mock_suite]
 

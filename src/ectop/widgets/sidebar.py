@@ -70,6 +70,8 @@ class SuiteTree(Tree[str]):
         self.host: str = ""
         self.port: int = 0
         self._all_paths_cache: list[str] | None = None
+        self._visibility_cache: dict[str, set[str]] = {}
+        self._search_paths_lower: list[str] = []
 
     def update_tree(self, client_host: str, client_port: int, defs: Defs | None) -> None:
         """
@@ -122,20 +124,66 @@ class SuiteTree(Tree[str]):
         """
         Rebuild the tree from ecFlow definitions using lazy loading.
         """
-        self._all_paths_cache = None
         self.clear()
         if not self.defs:
             self.root.label = "Server Empty"
+            self._all_paths_cache = None
+            self._visibility_cache = {}
+            self._search_paths_lower = []
             return
 
         filter_str = f" [Filter: {self.current_filter}]" if self.current_filter else ""
         self.root.label = f"{ICON_SERVER} {self.host}:{self.port}{filter_str}"
 
-        # Start background worker for tree population to avoid blocking UI
-        self._populate_tree_worker()
+        # Combine cache building and population triggering
+        self._build_caches_and_populate()
 
-        # Trigger background cache building for search
-        self._build_all_paths_cache_worker()
+    @work(exclusive=True, thread=True)
+    def _build_caches_and_populate(self) -> None:
+        """
+        Build search and visibility caches in background and then populate root.
+        """
+        if not self.defs:
+            return
+
+        all_paths: list[str] = []
+        # Pre-calculate visibility for all filters to avoid re-calculation on filter cycle
+        visibility: dict[str, set[str]] = {f: set() for f in self.filters if f is not None}
+
+        # Gather all nodes for efficient traversal
+        all_nodes: list[ecflow.Node] = []
+        for suite in self.defs.suites:
+            all_nodes.append(suite)
+            all_nodes.extend(suite.get_all_nodes())
+
+        for node in all_nodes:
+            path = node.get_abs_node_path()
+            all_paths.append(path)
+
+            # Update visibility for filters
+            state = str(node.get_state())
+            if state in visibility:
+                # This node matches the filter, mark it and all its parents as visible
+                curr = node
+                while curr:
+                    curr_path = curr.get_abs_node_path()
+                    if curr_path in visibility[state]:
+                        break  # Parents already marked
+                    visibility[state].add(curr_path)
+                    curr = curr.get_parent()
+
+        self._all_paths_cache = all_paths
+        self._search_paths_lower = [p.lower() for p in all_paths]
+        self._visibility_cache = visibility
+
+        # Now that caches are ready, populate the tree root on main thread
+        self._safe_call(self._populate_root)
+
+    def _populate_root(self) -> None:
+        """
+        Populate the tree root with suites.
+        """
+        self._populate_tree_worker()
 
     @work(exclusive=True, thread=True)
     def _populate_tree_worker(self) -> None:
@@ -181,39 +229,17 @@ class SuiteTree(Tree[str]):
         if not self.current_filter:
             return True
 
-        state = str(node.get_state())
-        if state == self.current_filter:
-            return True
+        visible_paths = self._visibility_cache.get(self.current_filter)
+        if visible_paths is None:
+            # Cache not ready or filter unknown, fallback to slow check
+            state = str(node.get_state())
+            if state == self.current_filter:
+                return True
+            if hasattr(node, "nodes"):
+                return any(self._should_show_node(child) for child in node.nodes)
+            return False
 
-        if hasattr(node, "nodes"):
-            return any(self._should_show_node(child) for child in node.nodes)
-
-        return False
-
-    @work(thread=True)
-    def _build_all_paths_cache_worker(self) -> None:
-        """
-        Worker to build the node path cache in a background thread.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This cache is used by find_and_select to provide fast search without
-        blocking the UI thread on the first search.
-        """
-        if not self.defs:
-            return
-
-        paths: list[str] = []
-        for suite in self.defs.suites:
-            paths.append(suite.get_abs_node_path())
-            for node in suite.get_all_nodes():
-                paths.append(node.get_abs_node_path())
-
-        self._all_paths_cache = paths
+        return node.get_abs_node_path() in visible_paths
 
     def action_cycle_filter(self) -> None:
         """
@@ -382,16 +408,17 @@ class SuiteTree(Tree[str]):
         query = query.lower()
 
         # Build or use cached paths
-        if not hasattr(self, "_all_paths_cache") or self._all_paths_cache is None:
-            # Fallback if cache isn't ready yet (e.g. searching immediately after sync)
-            paths: list[str] = []
+        if self._all_paths_cache is None:
+            # Fallback if cache isn't ready yet
+            all_paths: list[str] = []
             for suite in self.defs.suites:
-                paths.append(suite.get_abs_node_path())
-                for node in suite.get_all_nodes():
-                    paths.append(node.get_abs_node_path())
-            self._all_paths_cache = paths
+                all_paths.append(suite.get_abs_node_path())
+                all_paths.extend(n.get_abs_node_path() for n in suite.get_all_nodes())
+            self._all_paths_cache = all_paths
+            self._search_paths_lower = [p.lower() for p in self._all_paths_cache]
 
         all_paths = self._all_paths_cache
+        search_paths = self._search_paths_lower
 
         # Get current cursor state on main thread
         cursor_node = getattr(self, "cursor_node", None)
@@ -407,9 +434,9 @@ class SuiteTree(Tree[str]):
         # Search from start_index to end, then wrap around
         found_path = None
         for i in range(len(all_paths)):
-            path = all_paths[(start_index + i) % len(all_paths)]
-            if query in path.lower():
-                found_path = path
+            idx = (start_index + i) % len(all_paths)
+            if query in search_paths[idx]:
+                found_path = all_paths[idx]
                 break
 
         if found_path:
