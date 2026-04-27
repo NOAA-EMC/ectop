@@ -1,3 +1,7 @@
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -20,10 +24,10 @@ async def test_variable_tweaker_workers(mock_client):
 
         with patch.object(tweaker, "refresh_vars", new_callable=AsyncMock):
             await tweaker._delete_variable_logic("VAR1")
-            mock_client.alter.assert_called_with("/node", "delete_variable", "VAR1")
+            mock_client.alter.assert_called_with("/node", "delete", "variable", "VAR1")
 
             await tweaker._submit_variable_logic("NEWVAR=NEWVAL")
-            mock_client.alter.assert_called_with("/node", "add_variable", "NEWVAR", "NEWVAL")
+            mock_client.alter.assert_called_with("/node", "add", "variable", "NEWVAR", "NEWVAL")
 
 
 @pytest.mark.asyncio

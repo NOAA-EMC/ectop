@@ -530,6 +530,7 @@ class WhyInspector(ModalScreen[None]):
         for child in data.children:
             self._add_to_tree(new_node, child)
 
+
 @lru_cache(maxsize=128)
 def _get_expr_tree(expr_str: str) -> dict:
     """

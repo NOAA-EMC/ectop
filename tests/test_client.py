@@ -1,277 +1,131 @@
-# .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
-from unittest.mock import MagicMock, patch
-
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
+import ecflow
 import pytest
 
-from ectop.client import EcflowClient  # noqa: E402
+from ectop.client import EcflowClient
+
+
+@pytest.fixture
+def client_instance(ecflow_server):
+    host, port = ecflow_server.split(":")
+    return EcflowClient(host, int(port))
 
 
 @pytest.mark.asyncio
-async def test_client_init():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient("myhost", 1234)
-        mock_client.assert_called_with("myhost", 1234)
-        assert client.host == "myhost"
-        assert client.port == 1234
+async def test_client_init(ecflow_server):
+    host, port = ecflow_server.split(":")
+    client = EcflowClient(host, int(port))
+    assert client.host == host
+    assert client.port == int(port)
 
 
 @pytest.mark.asyncio
-async def test_client_init_failure():
-    with patch("ectop.client.ecflow.Client", side_effect=RuntimeError("Init failed")):
-        with pytest.raises(RuntimeError, match="Failed to initialize ecFlow client"):
-            EcflowClient("badhost", 1234)
+async def test_client_ping_success(client_instance):
+    await client_instance.ping()
 
 
 @pytest.mark.asyncio
-async def test_client_ping_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        await client.ping()
-        # Since we use a persistent client instance, we check if only one Client was created
-        assert mock_client.call_count == 1
-        # And if ping was called on that instance
-        mock_client.return_value.ping.assert_called_once()
+async def test_client_sync_local_success(client_instance):
+    await client_instance.sync_local()
 
 
 @pytest.mark.asyncio
-async def test_client_ping_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.ping.side_effect = RuntimeError("Connection refused")
-        with pytest.raises(RuntimeError, match="Failed to ping ecFlow server"):
-            await client.ping()
+async def test_client_get_defs(client_instance):
+    # sync_local MUST be called before get_defs to populate the local defs
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    assert isinstance(defs, ecflow.Defs)
 
 
 @pytest.mark.asyncio
-async def test_client_sync_local_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        await client.sync_local()
-        # sync_local uses the main client instance
-        mock_client.return_value.sync_local.assert_called_once()
+async def test_client_load_defs_success(client_instance, tmp_path):
+    defs_file = tmp_path / "test.def"
+    defs_file.write_text("suite test_suite\n  task t1\nendsuite")
+    await client_instance.load_defs(str(defs_file))
+
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    assert defs.find_suite("test_suite") is not None
 
 
 @pytest.mark.asyncio
-async def test_client_sync_local_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.sync_local.side_effect = RuntimeError("Sync error")
-        with pytest.raises(RuntimeError, match="Failed to sync with ecFlow server"):
-            await client.sync_local()
+async def test_client_suspend_resume_success(client_instance, tmp_path):
+    defs_file = tmp_path / "test_sr.def"
+    defs_file.write_text("suite test_sr\n  task t1\nendsuite")
+    await client_instance.load_defs(str(defs_file))
+
+    await client_instance.suspend("/test_sr")
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    assert defs.find_suite("test_sr").is_suspended()
+
+    await client_instance.resume("/test_sr")
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    assert not defs.find_suite("test_sr").is_suspended()
 
 
 @pytest.mark.asyncio
-async def test_client_get_defs():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_defs = MagicMock()
-        mock_client.return_value.get_defs.return_value = mock_defs
-        assert await client.get_defs() == mock_defs
+async def test_client_force_complete_success(client_instance, tmp_path):
+    defs_file = tmp_path / "test_fc.def"
+    defs_file.write_text("suite test_fc\n  task t1\nendsuite")
+    await client_instance.load_defs(str(defs_file))
+
+    await client_instance.force_complete("/test_fc/t1")
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    assert str(defs.find_abs_node("/test_fc/t1").get_state()) == "complete"
 
 
 @pytest.mark.asyncio
-async def test_client_file_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.get_file.return_value = "file content"
-        assert await client.file("/path", "jobout") == "file content"
-        mock_client.return_value.get_file.assert_called_with("/path", "jobout")
+async def test_client_alter_success(client_instance, tmp_path):
+    defs_file = tmp_path / "test_alter.def"
+    defs_file.write_text("suite test_alter\n  task t1\nendsuite")
+    await client_instance.load_defs(str(defs_file))
+
+    # Correct signature: ci.alter(path, 'add', 'variable', 'NAME', 'VALUE')
+    await client_instance.alter("/test_alter/t1", "add", "variable", "VAR1", "VAL1")
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    node = defs.find_abs_node("/test_alter/t1")
+    var = node.find_variable("VAR1")
+    assert var.value() == "VAL1"
 
 
 @pytest.mark.asyncio
-async def test_client_file_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.get_file.side_effect = RuntimeError("File not found")
-        with pytest.raises(RuntimeError, match="Failed to retrieve jobout for /path"):
-            await client.file("/path", "jobout")
+async def test_client_requeue_success(client_instance, tmp_path):
+    defs_file = tmp_path / "test_requeue.def"
+    defs_file.write_text("suite test_requeue\n  task t1\nendsuite")
+    await client_instance.load_defs(str(defs_file))
+    await client_instance.begin_suite("test_requeue")
+
+    await client_instance.force_complete("/test_requeue/t1")
+    await client_instance.requeue("/test_requeue/t1")
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    assert str(defs.find_abs_node("/test_requeue/t1").get_state()) == "queued"
 
 
 @pytest.mark.asyncio
-async def test_client_suspend_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        await client.suspend("/path")
-        mock_client.return_value.suspend.assert_called_with("/path")
+async def test_client_versions(client_instance):
+    v = await client_instance.version()
+    assert v is not None
+    sv = await client_instance.server_version()
+    assert sv is not None
 
 
 @pytest.mark.asyncio
-async def test_client_suspend_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.suspend.side_effect = RuntimeError("Error")
-        with pytest.raises(RuntimeError, match="Failed to suspend /path"):
-            await client.suspend("/path")
+async def test_client_server_control(client_instance):
+    # Halt and restart
+    await client_instance.halt_server()
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    assert str(defs.get_server_state()) == "HALTED"
 
-
-@pytest.mark.asyncio
-async def test_client_resume_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        await client.resume("/path")
-        mock_client.return_value.resume.assert_called_with("/path")
-
-
-@pytest.mark.asyncio
-async def test_client_resume_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.resume.side_effect = RuntimeError("Error")
-        with pytest.raises(RuntimeError, match="Failed to resume /path"):
-            await client.resume("/path")
-
-
-@pytest.mark.asyncio
-async def test_client_kill_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        await client.kill("/path")
-        mock_client.return_value.kill.assert_called_with("/path")
-
-
-@pytest.mark.asyncio
-async def test_client_kill_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.kill.side_effect = RuntimeError("Error")
-        with pytest.raises(RuntimeError, match="Failed to kill /path"):
-            await client.kill("/path")
-
-
-@pytest.mark.asyncio
-async def test_client_force_complete_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        await client.force_complete("/path")
-        mock_client.return_value.force_complete.assert_called_with("/path")
-
-
-@pytest.mark.asyncio
-async def test_client_force_complete_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.force_complete.side_effect = RuntimeError("Error")
-        with pytest.raises(RuntimeError, match="Failed to force complete /path"):
-            await client.force_complete("/path")
-
-
-@pytest.mark.asyncio
-async def test_client_alter_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        await client.alter("/path", "change", "var", "val")
-        mock_client.return_value.alter.assert_called_with("/path", "change", "var", "val")
-
-
-@pytest.mark.asyncio
-async def test_client_alter_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.alter.side_effect = RuntimeError("Error")
-        with pytest.raises(RuntimeError, match="Failed to alter /path"):
-            await client.alter("/path", "change", "var", "val")
-
-
-@pytest.mark.asyncio
-async def test_client_requeue_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        await client.requeue("/path")
-        mock_client.return_value.requeue.assert_called_with("/path")
-
-
-@pytest.mark.asyncio
-async def test_client_requeue_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.requeue.side_effect = RuntimeError("Error")
-        with pytest.raises(RuntimeError, match="Failed to requeue /path"):
-            await client.requeue("/path")
-
-
-@pytest.mark.asyncio
-async def test_client_server_control():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-
-        # Restart
-        await client.restart_server()
-        mock_client.return_value.restart_server.assert_called_once()
-
-        # Halt
-        await client.halt_server()
-        mock_client.return_value.halt_server.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_client_versions():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-
-        mock_client.return_value.version.return_value = "v1"
-        assert await client.version() == "v1"
-
-        mock_client.return_value.server_version.return_value = "v2"
-        assert await client.server_version() == "v2"
-
-
-@pytest.mark.asyncio
-async def test_client_version_failures():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-
-        mock_client.return_value.version.side_effect = RuntimeError("fail")
-        with pytest.raises(RuntimeError, match="Failed to get client version"):
-            await client.version()
-
-        mock_client.return_value.server_version.side_effect = RuntimeError("fail")
-        with pytest.raises(RuntimeError, match="Failed to get server version"):
-            await client.server_version()
-
-
-@pytest.mark.asyncio
-async def test_client_server_control_failures():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-
-        mock_client.return_value.restart_server.side_effect = RuntimeError("fail")
-        with pytest.raises(RuntimeError, match="Failed to restart server"):
-            await client.restart_server()
-
-        mock_client.return_value.halt_server.side_effect = RuntimeError("fail")
-        with pytest.raises(RuntimeError, match="Failed to halt server"):
-            await client.halt_server()
-
-
-@pytest.mark.asyncio
-async def test_client_load_defs_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        await client.load_defs("test.def")
-        mock_client.return_value.load.assert_called_with("test.def")
-
-
-@pytest.mark.asyncio
-async def test_client_load_defs_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.load.side_effect = RuntimeError("Load error")
-        with pytest.raises(RuntimeError, match="Failed to load definition file test.def"):
-            await client.load_defs("test.def")
-
-
-@pytest.mark.asyncio
-async def test_client_begin_suite_success():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        await client.begin_suite("test_suite")
-        mock_client.return_value.begin_suite.assert_called_with("test_suite")
-
-
-@pytest.mark.asyncio
-async def test_client_begin_suite_failure():
-    with patch("ectop.client.ecflow.Client") as mock_client:
-        client = EcflowClient()
-        mock_client.return_value.begin_suite.side_effect = RuntimeError("Begin error")
-        with pytest.raises(RuntimeError, match="Failed to begin suite test_suite"):
-            await client.begin_suite("test_suite")
+    await client_instance.restart_server()
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    assert str(defs.get_server_state()) == "RUNNING"

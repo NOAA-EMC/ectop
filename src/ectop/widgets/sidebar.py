@@ -42,6 +42,10 @@ class SuiteTree(Tree[str]):
 
     .. note::
         If you modify features, API, or usage, you MUST update the documentation immediately.
+
+    Attributes:
+        current_filter: The current status filter applied to the tree.
+        defs: The ecFlow definitions to display.
     """
 
     current_filter: reactive[str | None] = reactive(None, init=False)
@@ -54,16 +58,9 @@ class SuiteTree(Tree[str]):
         """
         Initialize the SuiteTree.
 
-        Parameters
-        ----------
-        *args : Any
-            Positional arguments for the Tree widget.
-        **kwargs : Any
-            Keyword arguments for the Tree widget.
-
-        Returns
-        -------
-        None
+        Args:
+            *args: Positional arguments for the Tree widget.
+            **kwargs: Keyword arguments for the Tree widget.
         """
         super().__init__(*args, **kwargs)
         self.filters: list[str | None] = TREE_FILTERS
@@ -77,22 +74,13 @@ class SuiteTree(Tree[str]):
         """
         Update the tree data.
 
-        Parameters
-        ----------
-        client_host : str
-            The hostname of the ecFlow server.
-        client_port : int
-            The port of the ecFlow server.
-        defs : ecflow.Defs | None
-            The ecFlow definitions to display.
+        Args:
+            client_host: The hostname of the ecFlow server.
+            client_port: The port of the ecFlow server.
+            defs: The ecFlow definitions to display.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This method triggers the reactive watchers.
+        Notes:
+            This method triggers the reactive watchers.
         """
         self.host = client_host
         self.port = client_port
@@ -102,10 +90,8 @@ class SuiteTree(Tree[str]):
         """
         Watch for changes in definitions and rebuild the tree.
 
-        Parameters
-        ----------
-        new_defs : ecflow.Defs | None
-            The new ecFlow definitions.
+        Args:
+            new_defs: The new ecFlow definitions.
         """
         self._rebuild_tree()
 
@@ -113,10 +99,8 @@ class SuiteTree(Tree[str]):
         """
         Watch for changes in the current filter and rebuild the tree.
 
-        Parameters
-        ----------
-        new_filter : str | None
-            The new filter value.
+        Args:
+            new_filter: The new filter value.
         """
         self._rebuild_tree()
 
@@ -253,14 +237,10 @@ class SuiteTree(Tree[str]):
         """
         Determine if a node should be shown based on the current filter.
 
-        Parameters
-        ----------
-        node : ecflow.Node
-            The ecFlow node to check.
+        Args:
+            node: The ecFlow node to check.
 
-        Returns
-        -------
-        bool
+        Returns:
             True if the node or any of its descendants match the filter.
         """
         if self.current_filter is None:
@@ -281,10 +261,6 @@ class SuiteTree(Tree[str]):
     def action_cycle_filter(self) -> None:
         """
         Cycle through available status filters and refresh the tree.
-
-        Returns
-        -------
-        None
         """
         current_idx = self.filters.index(self.current_filter)
         next_idx = (current_idx + 1) % len(self.filters)
@@ -296,22 +272,17 @@ class SuiteTree(Tree[str]):
         """
         Add a single ecflow node to the UI tree.
 
-        Parameters
-        ----------
-        parent_ui_node : TreeNode[str]
-            The parent node in the Textual tree.
-        ecflow_node : ecflow.Node
-            The ecFlow node to add.
+        Args:
+            parent_ui_node: The parent node in the Textual tree.
+            ecflow_node: The ecFlow node to add.
 
-        Returns
-        -------
-        TreeNode[str]
+        Returns:
             The newly created UI node.
         """
         state = str(ecflow_node.get_state())
         icon = STATE_MAP.get(state, ICON_UNKNOWN_STATE)
 
-        is_container = isinstance(ecflow_node, (ecflow.Family, ecflow.Suite))
+        is_container = isinstance(ecflow_node, ecflow.Family | ecflow.Suite)
         type_icon = ICON_FAMILY if is_container else ICON_TASK
 
         label = Text(f"{icon} {type_icon} {ecflow_node.name()} ")
@@ -343,14 +314,8 @@ class SuiteTree(Tree[str]):
         """
         Handle node expansion to load children on demand.
 
-        Parameters
-        ----------
-        event : Tree.NodeExpanded[str]
-            The expansion event.
-
-        Returns
-        -------
-        None
+        Args:
+            event: The expansion event.
         """
         node = event.node
         self._load_children(node)
@@ -415,18 +380,11 @@ class SuiteTree(Tree[str]):
         This handles searching through unloaded parts of the tree in a
         background thread to keep the UI responsive.
 
-        Parameters
-        ----------
-        query : str
-            The search query.
+        Args:
+            query: The search query.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker.
+        Notes:
+            This is a background worker.
         """
         self._find_and_select_logic(query)
 
@@ -434,10 +392,8 @@ class SuiteTree(Tree[str]):
         """
         The actual search logic split out for testing.
 
-        Parameters
-        ----------
-        query : str
-            The search query.
+        Args:
+            query: The search query.
         """
         if not self.defs:
             return
@@ -485,18 +441,12 @@ class SuiteTree(Tree[str]):
         """
         Safely call a UI-related function from either the main thread or a worker.
 
-        Parameters
-        ----------
-        callback : Callable[..., Any]
-            The function to call.
-        *args : Any
-            Positional arguments.
-        **kwargs : Any
-            Keyword arguments.
+        Args:
+            callback: The function to call.
+            *args: Positional arguments.
+            **kwargs: Keyword arguments.
 
-        Returns
-        -------
-        Any
+        Returns:
             The result of the call if synchronous, or None if scheduled.
         """
         try:
@@ -511,19 +461,12 @@ class SuiteTree(Tree[str]):
         """
         Select a node by its absolute ecFlow path, expanding parents as needed.
 
-        Parameters
-        ----------
-        path : str
-            The absolute path of the node to select.
+        Args:
+            path: The absolute path of the node to select.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background worker to avoid blocking the UI thread when
-        loading many nested nodes synchronously.
+        Notes:
+            This is a background worker to avoid blocking the UI thread when
+            loading many nested nodes synchronously.
         """
         self._select_by_path_logic(path)
 
@@ -531,19 +474,12 @@ class SuiteTree(Tree[str]):
         """
         The actual logic for selecting a node by path.
 
-        Parameters
-        ----------
-        path : str
-            The absolute path of the node to select.
+        Args:
+            path: The absolute path of the node to select.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This method should be called from a background thread as it performs
-        synchronous child loading.
+        Notes:
+            This method should be called from a background thread as it performs
+            synchronous child loading.
         """
         if path == "/":
             self.app.call_from_thread(self.select_node, self.root)
@@ -574,14 +510,8 @@ class SuiteTree(Tree[str]):
         """
         Select a node and expand all its parents.
 
-        Parameters
-        ----------
-        node : TreeNode[str]
-            The node to select and reveal.
-
-        Returns
-        -------
-        None
+        Args:
+            node: The node to select and reveal.
         """
         self.select_node(node)
         parent = node.parent

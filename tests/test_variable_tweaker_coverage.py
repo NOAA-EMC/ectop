@@ -1,3 +1,7 @@
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -53,7 +57,7 @@ async def test_variable_tweaker_submit_change(mock_client):
         tweaker.query_one = MagicMock()
         with patch.object(tweaker, "refresh_vars", new_callable=AsyncMock):
             await tweaker._submit_variable_logic("VAL1")
-            mock_client.alter.assert_called()
+            mock_client.alter.assert_called_with("/node", "add", "variable", "VAR1", "VAL1")
 
 
 @pytest.mark.asyncio
@@ -65,7 +69,7 @@ async def test_variable_tweaker_submit_add(mock_client):
         tweaker.query_one = MagicMock()
         with patch.object(tweaker, "refresh_vars", new_callable=AsyncMock):
             await tweaker._submit_variable_logic("VAR2=VAL2")
-            mock_client.alter.assert_called()
+            mock_client.alter.assert_called_with("/node", "add", "variable", "VAR2", "VAL2")
 
 
 @pytest.mark.asyncio
@@ -76,4 +80,4 @@ async def test_variable_tweaker_delete_worker(mock_client):
         tweaker = VariableTweaker("/node", mock_client)
         with patch.object(tweaker, "refresh_vars", new_callable=AsyncMock):
             await tweaker._delete_variable_logic("VAR1")
-            mock_client.alter.assert_called_with("/node", "delete_variable", "VAR1")
+            mock_client.alter.assert_called_with("/node", "delete", "variable", "VAR1")
