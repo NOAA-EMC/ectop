@@ -30,6 +30,7 @@ def mock_defs() -> MagicMock:
     suite1.get_abs_node_path.return_value = "/s1"
     suite1.get_state.return_value = "complete"
     suite1.nodes = []
+    suite1.get_all_nodes.return_value = []
 
     suite2 = MagicMock()
     suite2.name.return_value = "s2"
@@ -41,6 +42,7 @@ def mock_defs() -> MagicMock:
     task2a.get_abs_node_path.return_value = "/s2/t2a"
     task2a.get_state.return_value = "queued"
     task2a.nodes = []
+    task2a.get_all_nodes.return_value = []
 
     suite2.nodes = [task2a]
     suite2.get_all_nodes.return_value = [task2a]
@@ -50,6 +52,7 @@ def mock_defs() -> MagicMock:
     task2a.get_parent.return_value = suite2
 
     defs.suites = [suite1, suite2]
+    defs.get_all_nodes.return_value = [suite1, suite2, task2a]
     defs.find_abs_node.side_effect = lambda p: {"/s1": suite1, "/s2": suite2, "/s2/t2a": task2a}.get(p)
 
     return defs

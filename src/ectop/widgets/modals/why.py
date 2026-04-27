@@ -15,6 +15,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+import ecflow
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -49,12 +50,18 @@ class DepData:
     """
     Intermediate data structure for dependency information.
 
-    Attributes:
-        label: The text to display for this dependency.
-        path: The ecFlow path if this represents a node, otherwise None.
-        is_met: Whether this dependency is currently satisfied.
-        children: Nested dependencies.
-        icon: Optional icon override.
+    Attributes
+    ----------
+    label : str
+        The text to display for this dependency.
+    path : str | None
+        The ecFlow path if this represents a node, otherwise None.
+    is_met : bool
+        Whether this dependency is currently satisfied.
+    children : list[DepData]
+        Nested dependencies.
+    icon : str | None
+        Optional icon override.
     """
 
     label: str
@@ -81,19 +88,36 @@ class WhyInspector(ModalScreen[None]):
         """
         Initialize the WhyInspector.
 
-        Args:
-            node_path: The absolute path to the ecFlow node.
-            client: The ecFlow client instance.
+        Parameters
+        ----------
+        node_path : str
+            The absolute path to the ecFlow node.
+        client : EcflowClient
+            The ecFlow client instance.
+
+        Returns
+        -------
+        None
         """
         super().__init__()
         self.node_path: str = node_path
         self.client: EcflowClient = client
+        self._state_map = {
+            "unknown": ecflow.State.unknown,
+            "complete": ecflow.State.complete,
+            "queued": ecflow.State.queued,
+            "aborted": ecflow.State.aborted,
+            "submitted": ecflow.State.submitted,
+            "active": ecflow.State.active,
+        }
 
     def compose(self) -> ComposeResult:
         """
         Compose the modal UI.
 
-        Returns:
+        Returns
+        -------
+        ComposeResult
             The UI components for the modal.
         """
         with Vertical(id="why_container"):
@@ -105,12 +129,20 @@ class WhyInspector(ModalScreen[None]):
     def on_mount(self) -> None:
         """
         Handle the mount event to initialize the dependency tree.
+
+        Returns
+        -------
+        None
         """
         self.refresh_deps()
 
     def action_close(self) -> None:
         """
         Close the modal.
+
+        Returns
+        -------
+        None
         """
         self.app.pop_screen()
 
@@ -118,8 +150,14 @@ class WhyInspector(ModalScreen[None]):
         """
         Handle button press events.
 
-        Args:
-            event: The button press event.
+        Parameters
+        ----------
+        event : Button.Pressed
+            The button press event.
+
+        Returns
+        -------
+        None
         """
         if event.button.id == "close_btn":
             self.app.pop_screen()
@@ -128,8 +166,14 @@ class WhyInspector(ModalScreen[None]):
         """
         Jump to the selected dependency node in the main tree.
 
-        Args:
-            event: The tree node selection event.
+        Parameters
+        ----------
+        event : Tree.NodeSelected[str]
+            The tree node selection event.
+
+        Returns
+        -------
+        None
         """
         node_path = event.node.data
         if node_path:
@@ -146,6 +190,10 @@ class WhyInspector(ModalScreen[None]):
     def refresh_deps(self) -> None:
         """
         Fetch dependencies from the server and rebuild the tree.
+
+        Returns
+        -------
+        None
         """
         tree = self.query_one("#dep_tree", Tree)
         self._refresh_deps_worker(tree)
@@ -155,11 +203,18 @@ class WhyInspector(ModalScreen[None]):
         """
         Worker to fetch dependencies from the server and rebuild the tree.
 
-        Args:
-            tree: The tree widget to refresh.
+        Parameters
+        ----------
+        tree : Tree
+            The tree widget to refresh.
 
-        Notes:
-            This is an async background worker.
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This is an async background worker.
         """
         await self._refresh_deps_logic(tree)
 
@@ -167,11 +222,19 @@ class WhyInspector(ModalScreen[None]):
         """
         The actual logic for fetching dependencies and updating the UI tree.
 
-        Args:
-            tree: The tree widget to refresh.
+        Parameters
+        ----------
+        tree : Tree
+            The tree widget to refresh.
 
-        Raises:
-            RuntimeError: If server synchronization fails.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If server synchronization fails.
         """
         try:
             await self.client.sync_local()
@@ -200,11 +263,16 @@ class WhyInspector(ModalScreen[None]):
         """
         Gather dependency data from an ecFlow node.
 
-        Args:
-            node: The ecFlow node to inspect.
-            defs: The ecFlow definitions for node lookups.
+        Parameters
+        ----------
+        node : Node
+            The ecFlow node to inspect.
+        defs : Defs
+            The ecFlow definitions for node lookups.
 
-        Returns:
+        Returns
+        -------
+        DepData
             The root dependency data object.
         """
         root = DepData("Dependencies")
@@ -252,15 +320,47 @@ class WhyInspector(ModalScreen[None]):
         try:
             time_root = DepData("Time Dependencies")
             has_time = False
-            for t in node.get_times():
+
+            # We try to use the most common methods/attributes.
+            # Real ecFlow has .times, .dates, .crons attributes.
+            # Some older/mock versions use get_times(), etc.
+
+            times = []
+            for attr in ["times", "get_times"]:
+                try:
+                    val = getattr(node, attr)
+                    times = list(val() if callable(val) else val)
+                    if times: break
+                except (AttributeError, RuntimeError, TypeError):
+                    continue
+            for t in times:
                 time_root.children.append(DepData(f"Time: {t}", icon=ICON_TIME))
                 has_time = True
-            for d in node.get_dates():
+
+            dates = []
+            for attr in ["dates", "get_dates"]:
+                try:
+                    val = getattr(node, attr)
+                    dates = list(val() if callable(val) else val)
+                    if dates: break
+                except (AttributeError, RuntimeError, TypeError):
+                    continue
+            for d in dates:
                 time_root.children.append(DepData(f"Date: {d}", icon=ICON_DATE))
                 has_time = True
-            for c in node.get_crons():
+
+            crons = []
+            for attr in ["crons", "get_crons"]:
+                try:
+                    val = getattr(node, attr)
+                    crons = list(val() if callable(val) else val)
+                    if crons: break
+                except (AttributeError, RuntimeError, TypeError):
+                    continue
+            for c in crons:
                 time_root.children.append(DepData(f"Cron: {c}", icon=ICON_CRON))
                 has_time = True
+
             if has_time:
                 root.children.append(time_root)
         except (AttributeError, RuntimeError):
@@ -272,12 +372,18 @@ class WhyInspector(ModalScreen[None]):
         """
         Parse an ecFlow expression and populate DepData objects.
 
-        Args:
-            parent: The parent DepData object.
-            expr_str: The expression string to parse.
-            defs: The ecFlow definitions for node lookups.
+        Parameters
+        ----------
+        parent : DepData
+            The parent DepData object.
+        expr_str : str
+            The expression string to parse.
+        defs : Defs
+            The ecFlow definitions for node lookups.
 
-        Returns:
+        Returns
+        -------
+        bool
             True if the expression is currently met.
         """
         try:
@@ -336,23 +442,38 @@ class WhyInspector(ModalScreen[None]):
                 negation = match.group(1).strip()
                 path = match.group(2)
                 op = match.group(4) or "=="
-                expected_state = match.group(5) or "complete"
+                expected_state_str = match.group(5) or "complete"
                 target_node = defs.find_abs_node(path)
 
                 if target_node is not None:
-                    actual_state = str(target_node.get_state())
+                    actual_state = target_node.get_state()
+
+                    # For tests where get_state might return a string mock
+                    if isinstance(actual_state, str):
+                        expected_state = expected_state_str
+                    else:
+                        expected_state = self._state_map.get(expected_state_str, ecflow.State.complete)
+
                     is_met = False
                     if op == "==":
                         is_met = actual_state == expected_state
                     elif op == "!=":
                         is_met = actual_state != expected_state
+                    elif op == "<":
+                        is_met = actual_state < expected_state
+                    elif op == ">":
+                        is_met = actual_state > expected_state
+                    elif op == "<=":
+                        is_met = actual_state <= expected_state
+                    elif op == ">=":
+                        is_met = actual_state >= expected_state
 
                     if negation == "!":
                         is_met = not is_met
 
                     neg_str = "! " if negation == "!" else ""
-                    label = f"{neg_str}{path} {op} {actual_state} (Expected: {expected_state})"
-                    if actual_state == "aborted":
+                    label = f"{neg_str}{path} {op} {str(actual_state)} (Expected: {expected_state_str})"
+                    if str(actual_state) == "aborted":
                         label = f"[b red]{label} (STOPPED HERE)[/]"
 
                     parent.children.append(DepData(label, path=path, is_met=is_met))
@@ -371,9 +492,16 @@ class WhyInspector(ModalScreen[None]):
         """
         Update the tree UI from DepData.
 
-        Args:
-            tree: The tree widget.
-            data: The root dependency data.
+        Parameters
+        ----------
+        tree : Tree
+            The tree widget.
+        data : DepData
+            The root dependency data.
+
+        Returns
+        -------
+        None
         """
         tree.clear()
         tree.root.label = data.label
@@ -385,9 +513,16 @@ class WhyInspector(ModalScreen[None]):
         """
         Recursively add DepData to the Textual Tree.
 
-        Args:
-            parent_node: The parent TreeNode.
-            data: The DepData to add.
+        Parameters
+        ----------
+        parent_node : TreeNode[str]
+            The parent TreeNode.
+        data : DepData
+            The DepData to add.
+
+        Returns
+        -------
+        None
         """
         icon = data.icon or (ICON_MET if data.is_met else ICON_NOT_MET)
         label = f"{icon} {data.label}"
