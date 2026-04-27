@@ -47,43 +47,16 @@ Start `ectop` by running:
 ectop
 ```
 
-### Configuration & Environment Variables
+### Configuration & Key Bindings
 
-`ectop` can be configured via command-line arguments or environment variables.
+`ectop` offers flexible configuration via command-line arguments and environment variables. It also features a comprehensive set of key bindings for efficient navigation and control.
 
-- **Server Host**:
-    - CLI: `ectop --host <hostname>`
-    - Environment: `ECF_HOST` (defaults to `localhost`)
-- **Server Port**:
-    - CLI: `ectop --port <port>`
-    - Environment: `ECF_PORT` (defaults to `3141`)
-- **Refresh Interval**:
-    - CLI: `ectop --refresh <seconds>`
-    - Environment: `ECTOP_REFRESH` (defaults to `2.0`)
-- **Editor**:
-    - `ectop` uses the `EDITOR` environment variable for script editing. If not set, it defaults to `vi`.
-
-### Key Bindings
-
-| Key | Action |
-|-----|--------|
-| `q` | **Quit** the application |
-| `p` | Open **Command Palette** |
-| `r` | **Refresh** the entire suite tree from the server |
-| `l` | **Load** Logs, Script, and Job files for the selected node |
-| `s` | **Suspend** the selected node |
-| `u` | **Resume** the selected node |
-| `k` | **Kill** the selected task |
-| `f` | **Force Complete** the selected node |
-| `/` | Open **Search** box (Live search) |
-| `w` | Open **Why?** inspector for the selected node |
-| `e` | **Edit** the node script in your local editor and update server |
-| `t` | **Toggle Live** log updates for the current node |
-| `v` | View/Edit **Variables** for the selected node |
+For a full list of all available configuration options, environment variables, and key bindings, please see the [**Options & Configuration**](options.md) guide.
 
 ## Documentation
 
 - [Tutorial](tutorial.md)
+- [Options & Configuration](options.md)
 - [Architecture](architecture.md)
 - [Reference](reference.md)
 - [Contributing](contributing.md)
