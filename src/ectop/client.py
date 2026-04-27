@@ -512,16 +512,29 @@ class EcflowClient:
         """
         Load an ecFlow definition file to the server.
 
-        Args:
-            filepath: The path to the .def file.
+        Parameters
+        ----------
+        filepath : str
+            The path to the .def file.
 
-        Raises:
-            RuntimeError: If the file cannot be loaded.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the file cannot be loaded.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _load() -> None:
-            client = ecflow.Client(self.host, self.port)
-            client.load(filepath)
+            with self._lock:
+                self.client.load(filepath)
 
         try:
             await asyncio.to_thread(_load)
@@ -532,16 +545,29 @@ class EcflowClient:
         """
         Begin playback of a suite.
 
-        Args:
-            name: The name of the suite to begin.
+        Parameters
+        ----------
+        name : str
+            The name of the suite to begin.
 
-        Raises:
-            RuntimeError: If the suite cannot be started.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the suite cannot be started.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _begin() -> None:
-            client = ecflow.Client(self.host, self.port)
-            client.begin_suite(name)
+            with self._lock:
+                self.client.begin_suite(name)
 
         try:
             await asyncio.to_thread(_begin)

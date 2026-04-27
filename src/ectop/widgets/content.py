@@ -119,7 +119,7 @@ class MainContent(Vertical):
         content : str
             The new log content.
         """
-        if content == self._content_cache.get("output"):
+        if not content or content == self._content_cache.get("output"):
             return
 
         self.update_log(content, append=False)
