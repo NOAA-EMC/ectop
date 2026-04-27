@@ -33,6 +33,7 @@ async def test_search_cache_background_building():
 
         # Mock ecFlow Defs and Suites
         mock_defs = mock.MagicMock()
+        mock_defs.get_all_nodes.return_value = []
 
         # Create a mock that definitely has the methods and passes isinstance
         mock_suite = mock.MagicMock(spec=ecflow.Suite)
@@ -44,6 +45,7 @@ async def test_search_cache_background_building():
         mock_suite.get_parent.return_value = None
 
         mock_defs.suites = [mock_suite]
+        mock_defs.get_all_nodes.return_value = [mock_suite]
 
         # Update tree
         tree.update_tree("localhost", 3141, mock_defs)
@@ -75,6 +77,7 @@ async def test_find_and_select_fallback():
         mock_suite.name = mock.MagicMock(return_value="suite")
         mock_suite.get_all_nodes = mock.MagicMock(return_value=[])
         mock_suite.get_state = mock.MagicMock(return_value="unknown")
+        mock_suite.get_parent.return_value = None
 
         mock_defs.suites = [mock_suite]
 

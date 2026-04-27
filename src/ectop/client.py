@@ -28,22 +28,35 @@ class EcflowClient:
     .. note::
         If you modify features, API, or usage, you MUST update the documentation immediately.
 
-    Attributes:
-        host: The hostname of the ecFlow server.
-        port: The port number of the ecFlow server.
-        client: The underlying ecFlow client instance.
+    Attributes
+    ----------
+    host : str
+        The hostname of the ecFlow server.
+    port : int
+        The port number of the ecFlow server.
+    client : ecflow.Client
+        The underlying ecFlow client instance.
     """
 
     def __init__(self, host: str = "localhost", port: int = 3141) -> None:
         """
         Initialize the EcflowClient.
 
-        Args:
-            host: The hostname of the ecFlow server. Defaults to "localhost".
-            port: The port number of the ecFlow server. Defaults to 3141.
+        Parameters
+        ----------
+        host : str
+            The hostname of the ecFlow server. Defaults to "localhost".
+        port : int
+            The port number of the ecFlow server. Defaults to 3141.
 
-        Raises:
-            RuntimeError: If the ecFlow client cannot be initialized.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the ecFlow client cannot be initialized.
         """
         self.host: str = host
         self.port: int = port
@@ -57,17 +70,24 @@ class EcflowClient:
         """
         Ping the ecFlow server to check connectivity.
 
-        Raises:
-            RuntimeError: If the server is unreachable or the ping fails.
+        Returns
+        -------
+        None
 
-        Notes:
-            This is an async method that runs the blocking call in a separate thread.
+        Raises
+        ------
+        RuntimeError
+            If the server is unreachable or the ping fails.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _ping() -> None:
-            # We create a new client instance for thread-safety as per memory
-            client = ecflow.Client(self.host, self.port)
-            client.ping()
+            with self._lock:
+                self.client.ping()
 
         try:
             await asyncio.to_thread(_ping)
@@ -78,21 +98,22 @@ class EcflowClient:
         """
         Synchronize the local definition with the server.
 
-        Raises:
-            RuntimeError: If synchronization fails.
+        Returns
+        -------
+        None
 
-        Notes:
-            This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
+        Raises
+        ------
+        RuntimeError
+            If synchronization fails.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _sync() -> None:
-            # Using the main client here as sync_local affects its internal state
-            # which is then retrieved by get_defs.
-            # NOTE: If we really want to be thread-safe and use new clients,
-            # we'd need to return the Defs from here or handle it differently.
-            # For now, let's stick to using the persistent client for stateful operations
-            # but wrap it in to_thread and protect it with a lock.
             with self._lock:
                 self.client.sync_local()
 
@@ -105,15 +126,20 @@ class EcflowClient:
         """
         Retrieve the current definitions from the client.
 
-        Returns:
+        Returns
+        -------
+        ecflow.Defs | None
             The ecFlow definitions, or None if not available.
 
-        Raises:
-            RuntimeError: If the definitions cannot be retrieved.
+        Raises
+        ------
+        RuntimeError
+            If the definitions cannot be retrieved.
 
-        Notes:
-            This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _get_defs() -> Defs | None:
@@ -129,20 +155,32 @@ class EcflowClient:
         """
         Retrieve a file (log, script, job) for a specific node.
 
-        Args:
-            path: The absolute path to the node.
-            file_type: The type of file to retrieve ('jobout', 'script', 'job').
+        Parameters
+        ----------
+        path : str
+            The absolute path to the node.
+        file_type : str
+            The type of file to retrieve ('jobout', 'script', 'job').
 
-        Returns:
+        Returns
+        -------
+        str
             The content of the requested file.
 
-        Raises:
-            RuntimeError: If the file cannot be retrieved.
+        Raises
+        ------
+        RuntimeError
+            If the file cannot be retrieved.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _get_file() -> str:
-            client = ecflow.Client(self.host, self.port)
-            return client.get_file(path, file_type)
+            with self._lock:
+                return self.client.get_file(path, file_type)
 
         try:
             return await asyncio.to_thread(_get_file)
@@ -153,16 +191,29 @@ class EcflowClient:
         """
         Suspend a node.
 
-        Args:
-            path: The absolute path to the node.
+        Parameters
+        ----------
+        path : str
+            The absolute path to the node.
 
-        Raises:
-            RuntimeError: If the node cannot be suspended.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the node cannot be suspended.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _suspend() -> None:
-            client = ecflow.Client(self.host, self.port)
-            client.suspend(path)
+            with self._lock:
+                self.client.suspend(path)
 
         try:
             await asyncio.to_thread(_suspend)
@@ -173,16 +224,29 @@ class EcflowClient:
         """
         Resume a suspended node.
 
-        Args:
-            path: The absolute path to the node.
+        Parameters
+        ----------
+        path : str
+            The absolute path to the node.
 
-        Raises:
-            RuntimeError: If the node cannot be resumed.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the node cannot be resumed.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _resume() -> None:
-            client = ecflow.Client(self.host, self.port)
-            client.resume(path)
+            with self._lock:
+                self.client.resume(path)
 
         try:
             await asyncio.to_thread(_resume)
@@ -193,16 +257,29 @@ class EcflowClient:
         """
         Kill a running task.
 
-        Args:
-            path: The absolute path to the node.
+        Parameters
+        ----------
+        path : str
+            The absolute path to the node.
 
-        Raises:
-            RuntimeError: If the node cannot be killed.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the node cannot be killed.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _kill() -> None:
-            client = ecflow.Client(self.host, self.port)
-            client.kill(path)
+            with self._lock:
+                self.client.kill(path)
 
         try:
             await asyncio.to_thread(_kill)
@@ -213,20 +290,32 @@ class EcflowClient:
         """
         Force a node to the complete state.
 
-        Args:
-            path: The absolute path to the node.
+        Parameters
+        ----------
+        path : str
+            The absolute path to the node.
 
-        Raises:
-            RuntimeError: If the node state cannot be forced.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the node state cannot be forced.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _force_complete() -> None:
-            # Compatibility fix from memory: use force_state if force_complete is missing
-            client = ecflow.Client(self.host, self.port)
-            try:
-                client.force_complete(path)
-            except AttributeError:
-                client.force_state(path, ecflow.State.complete)
+            with self._lock:
+                try:
+                    self.client.force_complete(path)
+                except AttributeError:
+                    self.client.force_state(path, ecflow.State.complete)
 
         try:
             await asyncio.to_thread(_force_complete)
@@ -237,19 +326,35 @@ class EcflowClient:
         """
         Alter a node attribute or variable.
 
-        Args:
-            path: The absolute path to the node.
-            alter_type: The type of alteration (e.g., 'change', 'add', 'delete').
-            name: The name of the attribute or variable.
-            value: The new value. Defaults to "".
+        Parameters
+        ----------
+        path : str
+            The absolute path to the node.
+        alter_type : str
+            The type of alteration (e.g., 'change', 'add', 'delete').
+        name : str
+            The name of the attribute or variable.
+        value : str
+            The new value. Defaults to "".
 
-        Raises:
-            RuntimeError: If the alteration fails.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the alteration fails.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _alter() -> None:
-            client = ecflow.Client(self.host, self.port)
-            client.alter(path, alter_type, name, value)
+            with self._lock:
+                self.client.alter(path, alter_type, name, value)
 
         try:
             await asyncio.to_thread(_alter)
@@ -260,16 +365,29 @@ class EcflowClient:
         """
         Requeue a node.
 
-        Args:
-            path: The absolute path to the node.
+        Parameters
+        ----------
+        path : str
+            The absolute path to the node.
 
-        Raises:
-            RuntimeError: If the node cannot be requeued.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the node cannot be requeued.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _requeue() -> None:
-            client = ecflow.Client(self.host, self.port)
-            client.requeue(path)
+            with self._lock:
+                self.client.requeue(path)
 
         try:
             await asyncio.to_thread(_requeue)
@@ -280,13 +398,24 @@ class EcflowClient:
         """
         Restart the ecFlow server (resume from HALTED state).
 
-        Raises:
-            RuntimeError: If the server cannot be restarted.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the server cannot be restarted.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _restart() -> None:
-            client = ecflow.Client(self.host, self.port)
-            client.restart_server()
+            with self._lock:
+                self.client.restart_server()
 
         try:
             await asyncio.to_thread(_restart)
@@ -297,13 +426,24 @@ class EcflowClient:
         """
         Halt the ecFlow server (suspend scheduling).
 
-        Raises:
-            RuntimeError: If the server cannot be halted.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            If the server cannot be halted.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _halt() -> None:
-            client = ecflow.Client(self.host, self.port)
-            client.halt_server()
+            with self._lock:
+                self.client.halt_server()
 
         try:
             await asyncio.to_thread(_halt)
@@ -314,15 +454,20 @@ class EcflowClient:
         """
         Retrieve the ecFlow client version.
 
-        Returns:
+        Returns
+        -------
+        str
             The client version string.
 
-        Raises:
-            RuntimeError: If the version cannot be retrieved.
+        Raises
+        ------
+        RuntimeError
+            If the version cannot be retrieved.
 
-        Notes:
-            This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _version() -> str:
@@ -338,16 +483,25 @@ class EcflowClient:
         """
         Retrieve the ecFlow server version.
 
-        Returns:
+        Returns
+        -------
+        str
             The server version string.
 
-        Raises:
-            RuntimeError: If the server version cannot be retrieved.
+        Raises
+        ------
+        RuntimeError
+            If the server version cannot be retrieved.
+
+        Notes
+        -----
+        This is an async method that runs the blocking call in a separate thread.
+        It uses a threading lock to protect the persistent client instance.
         """
 
         def _server_version() -> str:
-            client = ecflow.Client(self.host, self.port)
-            return str(client.server_version())
+            with self._lock:
+                return str(self.client.server_version())
 
         try:
             return await asyncio.to_thread(_server_version)

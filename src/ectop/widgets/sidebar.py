@@ -150,27 +150,64 @@ class SuiteTree(Tree[str]):
         # Pre-calculate visibility for all filters to avoid re-calculation on filter cycle
         visibility: dict[str, set[str]] = {f: set() for f in self.filters if f is not None}
 
-        # Gather all nodes for efficient traversal
-        all_nodes: list[ecflow.Node] = []
-        for suite in self.defs.suites:
-            all_nodes.append(suite)
-            all_nodes.extend(suite.get_all_nodes())
+        # Optimized single-pass traversal using get_all_nodes()
+        # and post-order visibility propagation.
+        try:
+            # get_all_nodes() returns all nodes in the definitions
+            # If it's a mock, it might not have get_all_nodes or it might return a list
+            all_nodes_raw = self.defs.get_all_nodes()
+            all_nodes = list(all_nodes_raw)
 
-        for node in all_nodes:
-            path = node.get_abs_node_path()
-            all_paths.append(path)
+            # For visibility propagation, we need to go from leaves to root.
+            # get_all_nodes() usually returns in pre-order.
+            # We reverse it for a post-order effect.
+            for node in reversed(all_nodes):
+                path = node.get_abs_node_path()
+                all_paths.append(path)
 
-            # Update visibility for filters
-            state = str(node.get_state())
-            if state in visibility:
-                # This node matches the filter, mark it and all its parents as visible
-                curr = node
-                while curr:
-                    curr_path = curr.get_abs_node_path()
-                    if curr_path in visibility[state]:
-                        break  # Parents already marked
-                    visibility[state].add(curr_path)
-                    curr = curr.get_parent()
+                state = str(node.get_state())
+                if state in visibility:
+                    visibility[state].add(path)
+
+                # If this node matches a filter, its parent should also be visible for that filter.
+                # Since we are going in reverse (leaves to root), parents will be processed after children.
+                parent = node.get_parent()
+                if parent:
+                    parent_path = parent.get_abs_node_path()
+                    # Propagation: if any child is visible for a filter, parent is visible too.
+                    # We check all filters.
+                    for f in visibility:
+                        if path in visibility[f]:
+                            visibility[f].add(parent_path)
+
+            # all_paths was collected in reverse, fix it
+            all_paths.reverse()
+
+        except Exception:
+            # Fallback to per-suite traversal if get_all_nodes() fails or behavior is unexpected
+            all_paths = []
+            for suite in self.defs.suites:
+                suite_path = suite.get_abs_node_path()
+                all_paths.append(suite_path)
+
+                # Check suite state for visibility
+                suite_state = str(suite.get_state())
+                if suite_state in visibility:
+                    visibility[suite_state].add(suite_path)
+
+                suite_nodes = list(suite.get_all_nodes())
+                for node in suite_nodes:
+                    path = node.get_abs_node_path()
+                    all_paths.append(path)
+                    state = str(node.get_state())
+                    if state in visibility:
+                        curr: ecflow.Node | None = node
+                        while curr:
+                            curr_path = curr.get_abs_node_path()
+                            if curr_path in visibility[state]:
+                                break
+                            visibility[state].add(curr_path)
+                            curr = curr.get_parent()
 
         self._all_paths_cache = all_paths
         self._search_paths_lower = [p.lower() for p in all_paths]
@@ -230,12 +267,12 @@ class SuiteTree(Tree[str]):
             return True
 
         visible_paths = self._visibility_cache.get(self.current_filter)
-        if visible_paths is None:
+        if not visible_paths:
             # Cache not ready or filter unknown, fallback to slow check
             state = str(node.get_state())
             if state == self.current_filter:
                 return True
-            if hasattr(node, "nodes"):
+            if hasattr(node, "nodes") and node.nodes:
                 return any(self._should_show_node(child) for child in node.nodes)
             return False
 
