@@ -562,8 +562,19 @@ class Ectop(App):
         content_area = self.query_one("#main_content", MainContent)
         if content_area.is_live and content_area.active == "tab_output":
             path = self.get_selected_path()
-            if path:
-                self._live_log_worker(path)
+            if not path:
+                return
+
+            # Skip if node is in a final state and we already have content
+            tree = self.query_one("#suite_tree", SuiteTree)
+            if tree.defs:
+                node = tree.defs.find_abs_node(path)
+                if node:
+                    state = str(node.get_state())
+                    if state in ("complete", "aborted") and content_area._content_cache.get("output"):
+                        return
+
+            self._live_log_worker(path)
 
     @work(exclusive=True)
     async def _live_log_worker(self, path: str) -> None:
