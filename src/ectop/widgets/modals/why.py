@@ -312,7 +312,10 @@ class WhyInspector(ModalScreen[None]):
             if inlimits:
                 limit_root = DepData("Limits")
                 for il in inlimits:
-                    limit_root.children.append(DepData(f"Limit: {il.name()} (Path: {il.value()})", icon="🔒"))
+                    # InLimit.value() does not exist in ecFlow Python API, but name() and path_to_node() do.
+                    # Or we just use str(il) which often gives 'inlimit name path'
+                    path = il.path_to_node() or "Self"
+                    limit_root.children.append(DepData(f"Limit: {il.name()} (Path: {path})", icon="🔒"))
                 root.children.append(limit_root)
         except (AttributeError, RuntimeError):
             pass
