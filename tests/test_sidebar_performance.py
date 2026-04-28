@@ -1,3 +1,7 @@
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
 """
 Performance tests for SuiteTree to verify node addition batching.
 """

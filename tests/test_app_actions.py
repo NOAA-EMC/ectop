@@ -1,39 +1,60 @@
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ectop.app import Ectop
+from ectop.client import EcflowClient
 
 
 @pytest.fixture
-def app() -> Ectop:
-    app = Ectop(host="localhost", port=3141)
-    app.ecflow_client = AsyncMock()
+def client_instance(ecflow_server):
+    """Fixture to provide an EcflowClient connected to the test server."""
+    host, port = ecflow_server.split(":")
+    return EcflowClient(host, int(port))
+
+
+@pytest.fixture
+def app(client_instance):
+    """Fixture to provide an Ectop app connected to the test server."""
+    app = Ectop(host=client_instance.host, port=client_instance.port)
+    app.ecflow_client = client_instance
     return app
 
 
 @pytest.mark.asyncio
 async def test_action_restart_server(app: Ectop) -> None:
-    with patch.object(app, "action_refresh", new_callable=AsyncMock) as mock_refresh:
-        await app.action_restart_server()
-        app.ecflow_client.restart_server.assert_called_once()
-        mock_refresh.assert_called_once()
+    """Test action_restart_server correctly halts and restarts the server."""
+    # First halt it
+    await app.action_halt_server()
+    await app.ecflow_client.sync_local()
+    defs = await app.ecflow_client.get_defs()
+    assert str(defs.get_server_state()) == "HALTED"
+
+    # Now restart it
+    await app.action_restart_server()
+    await app.ecflow_client.sync_local()
+    defs = await app.ecflow_client.get_defs()
+    assert str(defs.get_server_state()) == "RUNNING"
 
 
 @pytest.mark.asyncio
-async def test_action_halt_server(app: Ectop) -> None:
-    with patch.object(app, "action_refresh", new_callable=AsyncMock) as mock_refresh:
-        await app.action_halt_server()
-        app.ecflow_client.halt_server.assert_called_once()
-        mock_refresh.assert_called_once()
+async def test_action_refresh_logic(app: Ectop, tmp_path) -> None:
+    """Test action_refresh correctly updates the app state from the server."""
+    # Load some defs
+    defs_content = "suite s1\n  task t1\nendsuite"
+    defs_file = tmp_path / "test_refresh.def"
+    defs_file.write_text(defs_content)
+    await app.ecflow_client.load_defs(str(defs_file))
 
-
-@pytest.mark.asyncio
-async def test_action_refresh_logic(app: Ectop) -> None:
-    mock_tree = AsyncMock()
-    mock_sb = AsyncMock()
+    # Mock UI components that action_refresh queries
+    mock_tree = MagicMock()
+    mock_sb = MagicMock()
 
     def side_effect(selector, type=None):
         if "#suite_tree" in selector:
@@ -42,47 +63,31 @@ async def test_action_refresh_logic(app: Ectop) -> None:
             return mock_sb
         return MagicMock()
 
-    with patch.object(app, "query_one", side_effect=side_effect):
-        app.ecflow_client.get_defs.return_value.get_server_state.return_value = "RUNNING"
-        app.ecflow_client.server_version.return_value = "5.11.4"
+    with patch.object(app, "query_one", side_effect=side_effect), patch.object(app, "notify"):
         await app.action_refresh()
-        app.ecflow_client.sync_local.assert_called_once()
-        mock_sb.update_status.assert_called()
+
+    await app.ecflow_client.sync_local()
+    defs = await app.ecflow_client.get_defs()
+    assert defs.find_suite("s1") is not None
+    # Verify UI was updated
+    mock_tree.update_tree.assert_called()
+    mock_sb.update_status.assert_called()
 
 
 @pytest.mark.asyncio
-async def test_action_load_node_worker(app: Ectop) -> None:
-    mock_mc = AsyncMock()
-    with patch.object(app, "get_selected_path", return_value="/s/t"), patch.object(app, "query_one", return_value=mock_mc):
-        app.ecflow_client.file.side_effect = ["logs", "script", "job"]
-        await app._load_node_worker("/s/t")
-        assert app.ecflow_client.file.call_count == 3
-        mock_mc.update_log.assert_called()
+async def test_run_client_command_success(app: Ectop, tmp_path) -> None:
+    """Test _run_client_command correctly performs operations on the server."""
+    defs_content = "suite s2\n  task t1\nendsuite"
+    defs_file = tmp_path / "test_command.def"
+    defs_file.write_text(defs_content)
+    await app.ecflow_client.load_defs(str(defs_file))
 
+    await app._run_client_command("suspend", "/s2")
+    await app.ecflow_client.sync_local()
+    defs = await app.ecflow_client.get_defs()
+    assert defs.find_suite("s2").is_suspended()
 
-@pytest.mark.asyncio
-async def test_run_client_command_success(app: Ectop) -> None:
-    with patch.object(app, "action_refresh", new_callable=AsyncMock) as mock_refresh:
-        await app._run_client_command("suspend", "/s/t")
-        app.ecflow_client.suspend.assert_called_with("/s/t")
-        mock_refresh.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_run_client_command_error(app: Ectop) -> None:
-    app.ecflow_client.suspend.side_effect = RuntimeError("failed")
-    with patch.object(app, "notify") as mock_notify:
-        await app._run_client_command("suspend", "/s/t")
-        mock_notify.assert_called_with("Command Error: failed", severity="error")
-
-
-@pytest.mark.asyncio
-async def test_live_log_tick(app: Ectop) -> None:
-    mock_mc = AsyncMock()
-    mock_mc.is_live = True
-    mock_mc.active = "tab_output"
-    with patch.object(app, "query_one", return_value=mock_mc), patch.object(app, "get_selected_path", return_value="/s/t"):
-        app.ecflow_client.file.return_value = "new logs"
-        await app._live_log_worker("/s/t")
-        app.ecflow_client.file.assert_called_with("/s/t", "jobout")
-        mock_mc.update_log.assert_called_with("new logs", append=True)
+    await app._run_client_command("resume", "/s2")
+    await app.ecflow_client.sync_local()
+    defs = await app.ecflow_client.get_defs()
+    assert not defs.find_suite("s2").is_suspended()

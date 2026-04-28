@@ -1,5 +1,9 @@
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
 # .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -24,21 +28,24 @@ async def test_app_handles_runtime_error():
         app = Ectop()
         # Mock call_from_thread to avoid thread-check issues in run_test
         app.call_from_thread = lambda callback, *args, **kwargs: callback(*args, **kwargs)
-
-        async with app.run_test() as pilot:
-            # In on_mount, _initial_connect is called.
-            # We wait for any workers to finish
-            await pilot.pause()
-            # Check notifications in the app
-            assert len(app._notifications) > 0
-            notification = list(app._notifications)[0]
-            assert "Connection Failed" in str(notification.message)
+        # Mock notify and check it was called instead of inspecting app._notifications
+        # which is bypassed by the mock.
+        with patch.object(app, "notify") as mock_notify:
+            async with app.run_test() as pilot:
+                # In on_mount, _initial_connect is called.
+                # We wait for any workers to finish
+                await pilot.pause()
+                # Check notifications in the app
+                mock_notify.assert_called()
+                args, _ = mock_notify.call_args
+                assert "Connection Failed" in args[0]
 
 
 @pytest.mark.asyncio
 async def test_app_actions():
     """Verify that app actions (suspend, resume, etc.) correctly call the client."""
     mock_client = AsyncMock()
+    mock_client.get_defs.return_value = MagicMock()
     with patch("ectop.app.EcflowClient", return_value=mock_client):
         app = Ectop()
         # Mock call_from_thread to avoid thread-check issues in run_test

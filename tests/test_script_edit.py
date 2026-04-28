@@ -1,3 +1,7 @@
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest

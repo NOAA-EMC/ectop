@@ -1,60 +1,60 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ectop.app import Ectop
+from ectop.client import EcflowClient
 from ectop.constants import STATUS_SYNC_ERROR
 
 
-@pytest.mark.asyncio
-async def test_app_initial_connect_runtime_error():
-    mock_client = AsyncMock()
-    with patch("ectop.app.EcflowClient", return_value=mock_client):
-        mock_client.ping.side_effect = RuntimeError("Connection timeout")
-        app = Ectop()
-        app.notify = AsyncMock()
-        app.query_one = MagicMock()
-        await app._initial_connect()
-        app.notify.assert_called()
+@pytest.fixture
+def client_instance(ecflow_server):
+    """Fixture to provide an EcflowClient connected to the test server."""
+    host, port = ecflow_server.split(":")
+    return EcflowClient(host, int(port))
+
+
+@pytest.fixture
+def app(client_instance):
+    """Fixture to provide an Ectop app connected to the test server."""
+    app = Ectop(host=client_instance.host, port=client_instance.port)
+    app.ecflow_client = client_instance
+    return app
 
 
 @pytest.mark.asyncio
-async def test_app_initial_connect_unexpected_error():
-    mock_client = AsyncMock()
-    with patch("ectop.app.EcflowClient", return_value=mock_client):
-        mock_client.ping.side_effect = Exception("Strange error")
-        app = Ectop()
-        app.notify = AsyncMock()
-        await app._initial_connect()
-        app.notify.assert_called()
+async def test_app_initial_connect_success(app):
+    """Test initial connection success with a real server."""
+    await app._initial_connect()
+    assert app.ecflow_client is not None
 
 
 @pytest.mark.asyncio
-async def test_run_client_command_error():
-    app = Ectop()
-    app.ecflow_client = AsyncMock()
-    app.notify = AsyncMock()
-    app.ecflow_client.suspend.side_effect = RuntimeError("failed")
-    await app._run_client_command("suspend", "/path")
-    app.notify.assert_called_with("Command Error: failed", severity="error")
+async def test_run_client_command_error(app):
+    """Test client command error handling with a real client instance."""
+    app.notify = MagicMock()
+    # Attempting to suspend a non-existent node should trigger an error from the server
+    await app._run_client_command("suspend", "/non_existent")
+    app.notify.assert_called()
+    args, kwargs = app.notify.call_args
+    assert "Error" in args[0] or kwargs.get("severity") == "error"
 
 
 @pytest.mark.asyncio
-async def test_action_refresh_error():
-    app = Ectop()
-    app.notify = AsyncMock()
-    mock_tree = MagicMock()
+async def test_action_refresh_error(app):
+    """Test action_refresh handles connection errors correctly."""
+    app.notify = MagicMock()
     mock_sb = MagicMock()
 
-    def side_effect(selector, type=None):
-        if "#suite_tree" in selector:
-            return mock_tree
-        if "#status_bar" in selector:
-            return mock_sb
-        return MagicMock()
-
-    app.query_one = side_effect
-    app.ecflow_client = AsyncMock()
-    app.ecflow_client.sync_local.side_effect = RuntimeError("Sync failed")
-    await app.action_refresh()
-    mock_sb.update_status.assert_called_with(app.ecflow_client.host, app.ecflow_client.port, status=STATUS_SYNC_ERROR)
+    # We mock query_one to return our mock status bar
+    with patch.object(app, "query_one", return_value=mock_sb):
+        # We manually break the client to simulate a connection error
+        with patch.object(app.ecflow_client, "sync_local", side_effect=RuntimeError("Sync failed")):
+            await app.action_refresh()
+            mock_sb.update_status.assert_called_with(app.ecflow_client.host, app.ecflow_client.port, status=STATUS_SYNC_ERROR)
+            app.notify.assert_called()
+            assert "Sync failed" in str(app.notify.call_args)

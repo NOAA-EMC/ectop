@@ -1,3 +1,7 @@
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
 # .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
 """
 Tests for the Sidebar (SuiteTree) widget.
@@ -19,8 +23,7 @@ def mock_defs() -> MagicMock:
     """
     Create a mock ecFlow definition with some suites.
 
-    Returns
-    -------
+    Returns:
     MagicMock
         A mock Defs object.
     """
@@ -62,8 +65,7 @@ def test_update_tree(mock_defs: MagicMock) -> None:
     """
     Test that update_tree clears and repopulates the tree.
 
-    Parameters
-    ----------
+    Parameters:
     mock_defs : MagicMock
         The mock ecFlow definitions.
     """
@@ -84,8 +86,7 @@ def test_load_children(mock_defs: MagicMock) -> None:
     """
     Test that _load_children calls the worker.
 
-    Parameters
-    ----------
+    Parameters:
     mock_defs : MagicMock
         The mock ecFlow definitions.
     """
@@ -115,8 +116,7 @@ def test_load_children_worker(mock_defs: MagicMock) -> None:
     """
     Test that the worker correctly schedules node additions.
 
-    Parameters
-    ----------
+    Parameters:
     mock_defs : MagicMock
         The mock ecFlow definitions.
     """
@@ -150,8 +150,7 @@ def test_select_by_path(mock_defs: MagicMock) -> None:
     """
     Test that select_by_path expands and selects the correct node.
 
-    Parameters
-    ----------
+    Parameters:
     mock_defs : MagicMock
         The mock ecFlow definitions.
     """
@@ -190,8 +189,7 @@ def test_find_and_select_caching(mock_defs: MagicMock) -> None:
     """
     Test that find_and_select uses the path cache.
 
-    Parameters
-    ----------
+    Parameters:
     mock_defs : MagicMock
         The mock ecFlow definitions.
     """
