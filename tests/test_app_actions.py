@@ -4,9 +4,9 @@
 # #############################################################################
 from __future__ import annotations
 
-import ecflow
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from ectop.app import Ectop
 from ectop.client import EcflowClient

@@ -2,9 +2,9 @@
 # WARNING: If you modify features, API, or usage, you MUST update the
 # documentation immediately.
 # #############################################################################
-import ecflow
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from ectop.app import Ectop
 from ectop.client import EcflowClient
@@ -55,8 +55,6 @@ async def test_action_refresh_error(app):
         # We manually break the client to simulate a connection error
         with patch.object(app.ecflow_client, "sync_local", side_effect=RuntimeError("Sync failed")):
             await app.action_refresh()
-            mock_sb.update_status.assert_called_with(
-                app.ecflow_client.host, app.ecflow_client.port, status=STATUS_SYNC_ERROR
-            )
+            mock_sb.update_status.assert_called_with(app.ecflow_client.host, app.ecflow_client.port, status=STATUS_SYNC_ERROR)
             app.notify.assert_called()
             assert "Sync failed" in str(app.notify.call_args)

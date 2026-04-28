@@ -99,6 +99,7 @@ async def test_client_alter_success(client_instance, tmp_path):
 async def test_client_requeue_success(client_instance, tmp_path):
     # Use a unique suite name to avoid interference
     import random
+
     suite_name = f"test_requeue_{random.randint(0, 10000)}"
     defs_file = tmp_path / f"{suite_name}.def"
     defs_file.write_text(f"suite {suite_name}\n  task t1\nendsuite")

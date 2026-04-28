@@ -11,7 +11,7 @@ Tests for refactored logic and new features.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
