@@ -23,7 +23,8 @@ from ectop.widgets.sidebar import SuiteTree
 @pytest.fixture
 def unique_suite_names():
     def _generator(n):
-        return ['s' + ''.join(random.choices(string.ascii_lowercase, k=8)) for _ in range(n)]
+        return ["s" + "".join(random.choices(string.ascii_lowercase, k=8)) for _ in range(n)]
+
     return _generator
 
 

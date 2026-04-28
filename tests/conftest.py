@@ -26,12 +26,14 @@ def mock_work(*args, **kwargs):
                     # We are already in a loop (pytest-asyncio)
                     # We return the task and let the test await it if needed
                     task = loop.create_task(result)
+
                     # We also add a callback to catch exceptions
                     def _done_callback(t):
                         try:
                             t.result()
                         except Exception:
                             pass
+
                     task.add_done_callback(_done_callback)
                     return task
                 except RuntimeError:

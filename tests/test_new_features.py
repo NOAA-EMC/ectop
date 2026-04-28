@@ -69,7 +69,7 @@ def test_suite_tree_filtering(ecflow_server) -> None:
 
     defs = ecflow.Defs()
     suite = defs.add_suite("suite")
-    task1 = suite.add_task("task1")
+    suite.add_task("task1")
 
     client.load(defs, force=True)
     client.begin_all_suites()
