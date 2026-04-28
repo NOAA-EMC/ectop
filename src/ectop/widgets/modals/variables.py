@@ -231,13 +231,13 @@ class VariableTweaker(ModalScreen[None]):
         try:
             if self.selected_var_name:
                 # Editing existing
-                await self.client.alter(self.node_path, "add_variable", self.selected_var_name, value)
+                await self.client.alter(self.node_path, "add", "variable", self.selected_var_name, value)
                 self.app.notify(f"Updated {self.selected_var_name}")
             else:
                 # Adding new (expecting name=value)
                 if "=" in value:
                     name, val = value.split("=", 1)
-                    await self.client.alter(self.node_path, "add_variable", name.strip(), val.strip())
+                    await self.client.alter(self.node_path, "add", "variable", name.strip(), val.strip())
                     self.app.notify(f"Added {name.strip()}")
                 else:
                     self.app.notify("Use name=value format to add", severity="warning")
@@ -314,7 +314,7 @@ class VariableTweaker(ModalScreen[None]):
             return
 
         try:
-            await self.client.alter(self.node_path, "delete_variable", row_key)
+            await self.client.alter(self.node_path, "delete", "variable", row_key)
             self.app.notify(f"Deleted {row_key}")
             await self.refresh_vars()
         except RuntimeError as e:

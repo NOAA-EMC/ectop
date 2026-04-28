@@ -744,7 +744,7 @@ class Ectop(App):
 
             if new_content != old_content:
                 if self.ecflow_client:
-                    await self.ecflow_client.alter(path, "change", "script", new_content)
+                    await self.ecflow_client.alter(path, "change", "script", "", new_content)
                     self.notify("Script updated on server")
                     self._prompt_requeue(path)
             else:

@@ -43,6 +43,7 @@ textual.work = mock_work
 
 
 def get_free_port():
+    """Find a free port on localhost."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("", 0))
         return s.getsockname()[1]
@@ -57,18 +58,25 @@ def ecflow_server():
     if not ecflow_server_bin:
         pytest.skip("ecflow_server binary not found")
 
-    port = 3141
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("", port))
-    except OSError:
-        port = get_free_port()
+    port = get_free_port()
+    # Ensure it's in the allowed range 1024-49151
+    if not (1024 <= port <= 49151):
+        # If not, just try 3141 or another free one.
+        # This is rare but possible.
+        port = 3141
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("", port))
+        except OSError:
+            # Fallback to a simple loop if needed, but get_free_port usually works fine
+            pass
 
     tmp_dir = tempfile.mkdtemp()
     env = os.environ.copy()
     env["ECF_PORT"] = str(port)
     env["ECF_HOME"] = tmp_dir
     env["LANG"] = "C"
+    env["ECF_LISTS"] = ""
 
     # Start server
     process = subprocess.Popen(
@@ -88,7 +96,7 @@ def ecflow_server():
         pytest.skip("ecflow python module not found")
 
     client = ecflow.Client("localhost", port)
-    max_retries = 20
+    max_retries = 30
     connected = False
     for _ in range(max_retries):
         try:
@@ -96,6 +104,8 @@ def ecflow_server():
             connected = True
             break
         except RuntimeError:
+            if process.poll() is not None:
+                break
             time.sleep(0.5)
 
     if not connected:
@@ -104,8 +114,19 @@ def ecflow_server():
         shutil.rmtree(tmp_dir)
         raise RuntimeError(f"ecflow_server failed to start on port {port}")
 
-    yield {"host": "localhost", "port": port}
+    yield f"localhost:{port}"
+
+    # Shutdown
+    try:
+        client.halt_server()
+        client.terminate_server()
+    except Exception:
+        pass
 
     process.terminate()
-    process.wait()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+
     shutil.rmtree(tmp_dir)
