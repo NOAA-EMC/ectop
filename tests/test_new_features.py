@@ -2,7 +2,6 @@
 # WARNING: If you modify features, API, or usage, you MUST update the
 # documentation immediately.
 # #############################################################################
-# .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
 """
 Tests for newly added features in ectop.
 
@@ -12,6 +11,7 @@ Tests for newly added features in ectop.
 
 from unittest.mock import MagicMock
 
+import ecflow
 import pytest
 
 from ectop.app import Ectop, EctopCommands
@@ -61,39 +61,39 @@ async def test_ectop_commands_provider() -> None:
     assert any(h.match_display == "Refresh Tree" for h in hits)
 
 
-def test_suite_tree_filtering() -> None:
-    """Test SuiteTree filtering logic."""
+def test_suite_tree_filtering(ecflow_server) -> None:
+    """Test SuiteTree filtering logic using real ecFlow objects."""
+    host, port = ecflow_server.split(":")
+    client = ecflow.Client(host, int(port))
+    client.restart_server()
+
+    defs = ecflow.Defs()
+    suite = defs.add_suite("suite")
+    task1 = suite.add_task("task1")
+
+    client.load(defs, force=True)
+    client.begin_all_suites()
+    client.force_state("/suite/task1", ecflow.State.aborted)
+    client.sync_local()
+
+    real_defs = client.get_defs()
+
     tree = SuiteTree("Test")
-    mock_defs = MagicMock()
-
-    # Mock node structure
-    suite = MagicMock()
-    suite.get_state.return_value = "complete"
-    suite.get_abs_node_path.return_value = "/suite"
-    suite.get_parent.return_value = None
-
-    task1 = MagicMock()
-    task1.get_state.return_value = "aborted"
-    task1.get_abs_node_path.return_value = "/suite/task1"
-    task1.get_parent.return_value = suite
-    task1.nodes = []
-
-    suite.nodes = [task1]
-    suite.get_all_nodes.return_value = [task1]
-    mock_defs.suites = [suite]
-
-    tree.defs = mock_defs
+    tree.defs = real_defs
     tree.filters = [None, "aborted", "active"]
     tree._build_caches_and_populate()
 
     # Test _should_show_node
     tree.current_filter = "aborted"
-    assert tree._should_show_node(task1) is True
-    assert tree._should_show_node(suite) is True  # Should show because child matches
+    real_task1 = real_defs.find_abs_node("/suite/task1")
+    real_suite = real_defs.find_suite("suite")
+
+    assert tree._should_show_node(real_task1) is True
+    assert tree._should_show_node(real_suite) is True  # Should show because child matches
 
     tree.current_filter = "active"
-    assert tree._should_show_node(task1) is False
-    assert tree._should_show_node(suite) is False
+    assert tree._should_show_node(real_task1) is False
+    assert tree._should_show_node(real_suite) is False
 
 
 def test_main_content_search_toggle() -> None:

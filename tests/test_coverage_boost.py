@@ -11,7 +11,7 @@ Additional tests to boost coverage and verify new functionality.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -22,7 +22,7 @@ from ectop.widgets.modals.why import WhyInspector
 @pytest.mark.asyncio
 async def test_app_action_requeue():
     """Verify that action_requeue correctly calls the client."""
-    mock_client = AsyncMock()
+    mock_client = MagicMock()
     mock_client.get_defs.return_value = MagicMock()
     with patch("ectop.app.EcflowClient", return_value=mock_client):
         app = Ectop()
@@ -41,7 +41,7 @@ async def test_app_action_requeue():
 @pytest.mark.asyncio
 async def test_app_action_copy_path():
     """Verify that action_copy_path notifies the user."""
-    mock_client = AsyncMock()
+    mock_client = MagicMock()
     mock_client.get_defs.return_value = MagicMock()
     with patch("ectop.app.EcflowClient", return_value=mock_client):
         app = Ectop()
@@ -61,7 +61,7 @@ async def test_app_action_copy_path():
 @pytest.mark.asyncio
 async def test_why_inspector_error_handling():
     """Test error handling logic in WhyInspector._refresh_deps_logic."""
-    mock_client = AsyncMock()
+    mock_client = MagicMock()
     inspector = WhyInspector("/node", mock_client)
 
     with patch.object(WhyInspector, "app", new_callable=PropertyMock) as mock_app:

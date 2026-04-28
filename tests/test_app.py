@@ -3,7 +3,7 @@
 # documentation immediately.
 # #############################################################################
 # .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,7 +21,7 @@ async def test_app_instantiation():
 async def test_app_handles_runtime_error():
     """Verify that the app handles a RuntimeError from the client gracefully."""
     # We need to mock the client
-    mock_client = AsyncMock()
+    mock_client = MagicMock()
     mock_client.ping.side_effect = RuntimeError("Mock server error")
 
     with patch("ectop.app.EcflowClient", return_value=mock_client):
@@ -44,7 +44,7 @@ async def test_app_handles_runtime_error():
 @pytest.mark.asyncio
 async def test_app_actions():
     """Verify that app actions (suspend, resume, etc.) correctly call the client."""
-    mock_client = AsyncMock()
+    mock_client = MagicMock()
     mock_client.get_defs.return_value = MagicMock()
     with patch("ectop.app.EcflowClient", return_value=mock_client):
         app = Ectop()

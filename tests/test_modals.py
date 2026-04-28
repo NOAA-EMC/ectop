@@ -2,7 +2,7 @@
 # WARNING: If you modify features, API, or usage, you MUST update the
 # documentation immediately.
 # #############################################################################
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -12,7 +12,7 @@ from ectop.widgets.modals.why import WhyInspector
 
 @pytest.fixture
 def mock_client():
-    return AsyncMock()
+    return MagicMock()
 
 
 @pytest.mark.asyncio
