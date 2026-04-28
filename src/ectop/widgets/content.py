@@ -31,12 +31,9 @@ class MainContent(Vertical):
     .. note::
         If you modify features, API, or usage, you MUST update the documentation immediately.
 
-    Attributes
-    ----------
-    is_live : bool
-        Whether live log updates are enabled.
-    last_log_size : int
-        The size of the log content at the last update.
+    Attributes:
+        is_live: Whether live log updates are enabled.
+        last_log_size: The size of the log content at the last update.
     """
 
     is_live: reactive[bool] = reactive(False, init=False)
@@ -55,12 +52,9 @@ class MainContent(Vertical):
         """
         Initialize the MainContent widget.
 
-        Parameters
-        ----------
-        *args : Any
-            Positional arguments for Vertical.
-        **kwargs : Any
-            Keyword arguments for Vertical.
+        Args:
+            *args: Positional arguments for Vertical.
+            **kwargs: Keyword arguments for Vertical.
         """
         super().__init__(*args, **kwargs)
         self.last_log_size: int = 0
@@ -70,9 +64,7 @@ class MainContent(Vertical):
         """
         Compose the tabs for Output, Script, and Job.
 
-        Returns
-        -------
-        ComposeResult
+        Returns:
             The UI components for the tabs.
         """
         yield Input(placeholder="Search in content...", id="content_search", classes="hidden")
@@ -91,9 +83,7 @@ class MainContent(Vertical):
         """
         Get the active tab ID.
 
-        Returns
-        -------
-        str | None
+        Returns:
             The ID of the active tab.
         """
         return self.query_one("#content_tabs", TabbedContent).active
@@ -103,10 +93,8 @@ class MainContent(Vertical):
         """
         Set the active tab ID.
 
-        Parameters
-        ----------
-        value : str
-            The ID of the tab to activate.
+        Args:
+            value: The ID of the tab to activate.
         """
         self.query_one("#content_tabs", TabbedContent).active = value
 
@@ -114,10 +102,8 @@ class MainContent(Vertical):
         """
         Watch for changes in log content and update the widget.
 
-        Parameters
-        ----------
-        content : str
-            The new log content.
+        Args:
+            content: The new log content.
         """
         if not content or content == self._content_cache.get("output"):
             return
@@ -128,10 +114,8 @@ class MainContent(Vertical):
         """
         Watch for changes in script content and update the widget.
 
-        Parameters
-        ----------
-        content : str
-            The new script content.
+        Args:
+            content: The new script content.
         """
         if content == self._content_cache.get("script"):
             return
@@ -145,10 +129,8 @@ class MainContent(Vertical):
         """
         Watch for changes in job content and update the widget.
 
-        Parameters
-        ----------
-        content : str
-            The new job content.
+        Args:
+            content: The new job content.
         """
         if content == self._content_cache.get("job"):
             return
@@ -162,12 +144,9 @@ class MainContent(Vertical):
         """
         Update the Output log tab.
 
-        Parameters
-        ----------
-        content : str
-            The content to display or append.
-        append : bool, optional
-            Whether to attempt appending to existing content, by default False.
+        Args:
+            content: The content to display or append.
+            append: Whether to attempt appending to existing content, by default False.
         """
         widget = self.query_one("#log_output", RichLog)
 
@@ -195,10 +174,8 @@ class MainContent(Vertical):
         """
         Update the Script tab.
 
-        Parameters
-        ----------
-        content : str
-            The script content.
+        Args:
+            content: The script content.
         """
         self.script_content = content
 
@@ -206,20 +183,14 @@ class MainContent(Vertical):
         """
         Update the Job tab.
 
-        Parameters
-        ----------
-        content : str
-            The job content.
+        Args:
+            content: The job content.
         """
         self.job_content = content
 
     def action_search(self) -> None:
         """
         Toggle the content search input.
-
-        Returns
-        -------
-        None
         """
         search_input = self.query_one("#content_search", Input)
         if "hidden" in search_input.classes:
@@ -236,14 +207,8 @@ class MainContent(Vertical):
         """
         Handle content search submission.
 
-        Parameters
-        ----------
-        event : Input.Submitted
-            The input submission event.
-
-        Returns
-        -------
-        None
+        Args:
+            event: The input submission event.
         """
         if event.input.id == "content_search":
             query = event.value
@@ -268,14 +233,10 @@ class MainContent(Vertical):
         """
         Run the search in a background worker.
 
-        Parameters
-        ----------
-        query : str
-            The search query.
-        content : str
-            The content to search.
-        label : str
-            The label of the content being searched.
+        Args:
+            query: The search query.
+            content: The content to search.
+            label: The label of the content being searched.
         """
         matches = content.lower().count(query.lower())
         if matches > 0:
@@ -287,12 +248,9 @@ class MainContent(Vertical):
         """
         Display an error message in a specific widget and clear cache.
 
-        Parameters
-        ----------
-        widget_id : str
-            The ID of the widget where the error should be shown.
-        message : str
-            The error message to display.
+        Args:
+            widget_id: The ID of the widget where the error should be shown.
+            message: The error message to display.
         """
         cache_key = None
         if widget_id == "#log_output":

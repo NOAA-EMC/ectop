@@ -28,35 +28,22 @@ class EcflowClient:
     .. note::
         If you modify features, API, or usage, you MUST update the documentation immediately.
 
-    Attributes
-    ----------
-    host : str
-        The hostname of the ecFlow server.
-    port : int
-        The port number of the ecFlow server.
-    client : ecflow.Client
-        The underlying ecFlow client instance.
+    Attributes:
+        host: The hostname of the ecFlow server.
+        port: The port number of the ecFlow server.
+        client: The underlying ecFlow client instance.
     """
 
     def __init__(self, host: str = "localhost", port: int = 3141) -> None:
         """
         Initialize the EcflowClient.
 
-        Parameters
-        ----------
-        host : str
-            The hostname of the ecFlow server. Defaults to "localhost".
-        port : int
-            The port number of the ecFlow server. Defaults to 3141.
+        Args:
+            host: The hostname of the ecFlow server. Defaults to "localhost".
+            port: The port number of the ecFlow server. Defaults to 3141.
 
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        RuntimeError
-            If the ecFlow client cannot be initialized.
+        Raises:
+            RuntimeError: If the ecFlow client cannot be initialized.
         """
         self.host: str = host
         self.port: int = port
@@ -70,19 +57,12 @@ class EcflowClient:
         """
         Ping the ecFlow server to check connectivity.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the server is unreachable or the ping fails.
 
-        Raises
-        ------
-        RuntimeError
-            If the server is unreachable or the ping fails.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _ping() -> None:
@@ -98,19 +78,12 @@ class EcflowClient:
         """
         Synchronize the local definition with the server.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If synchronization fails.
 
-        Raises
-        ------
-        RuntimeError
-            If synchronization fails.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _sync() -> None:
@@ -126,20 +99,15 @@ class EcflowClient:
         """
         Retrieve the current definitions from the client.
 
-        Returns
-        -------
-        ecflow.Defs | None
+        Returns:
             The ecFlow definitions, or None if not available.
 
-        Raises
-        ------
-        RuntimeError
-            If the definitions cannot be retrieved.
+        Raises:
+            RuntimeError: If the definitions cannot be retrieved.
 
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _get_defs() -> Defs | None:
@@ -155,27 +123,19 @@ class EcflowClient:
         """
         Retrieve a file (log, script, job) for a specific node.
 
-        Parameters
-        ----------
-        path : str
-            The absolute path to the node.
-        file_type : str
-            The type of file to retrieve ('jobout', 'script', 'job').
+        Args:
+            path: The absolute path to the node.
+            file_type: The type of file to retrieve ('jobout', 'script', 'job').
 
-        Returns
-        -------
-        str
+        Returns:
             The content of the requested file.
 
-        Raises
-        ------
-        RuntimeError
-            If the file cannot be retrieved.
+        Raises:
+            RuntimeError: If the file cannot be retrieved.
 
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _get_file() -> str:
@@ -191,24 +151,15 @@ class EcflowClient:
         """
         Suspend a node.
 
-        Parameters
-        ----------
-        path : str
-            The absolute path to the node.
+        Args:
+            path: The absolute path to the node.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the node cannot be suspended.
 
-        Raises
-        ------
-        RuntimeError
-            If the node cannot be suspended.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _suspend() -> None:
@@ -224,24 +175,15 @@ class EcflowClient:
         """
         Resume a suspended node.
 
-        Parameters
-        ----------
-        path : str
-            The absolute path to the node.
+        Args:
+            path: The absolute path to the node.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the node cannot be resumed.
 
-        Raises
-        ------
-        RuntimeError
-            If the node cannot be resumed.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _resume() -> None:
@@ -257,24 +199,15 @@ class EcflowClient:
         """
         Kill a running task.
 
-        Parameters
-        ----------
-        path : str
-            The absolute path to the node.
+        Args:
+            path: The absolute path to the node.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the node cannot be killed.
 
-        Raises
-        ------
-        RuntimeError
-            If the node cannot be killed.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _kill() -> None:
@@ -290,24 +223,15 @@ class EcflowClient:
         """
         Force a node to the complete state.
 
-        Parameters
-        ----------
-        path : str
-            The absolute path to the node.
+        Args:
+            path: The absolute path to the node.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the node state cannot be forced.
 
-        Raises
-        ------
-        RuntimeError
-            If the node state cannot be forced.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _force_complete() -> None:
@@ -322,67 +246,50 @@ class EcflowClient:
         except RuntimeError as e:
             raise RuntimeError(f"Failed to force complete {path}: {e}") from e
 
-    async def alter(self, path: str, alter_type: str, name: str, value: str = "") -> None:
+    async def alter(self, path: str, alter_type: str, attr_type: str, name: str = "", value: str | None = None) -> None:
         """
         Alter a node attribute or variable.
 
-        Parameters
-        ----------
-        path : str
-            The absolute path to the node.
-        alter_type : str
-            The type of alteration (e.g., 'change', 'add', 'delete').
-        name : str
-            The name of the attribute or variable.
-        value : str
-            The new value. Defaults to "".
+        Args:
+            path: The absolute path to the node.
+            alter_type: The type of alteration (e.g., 'change', 'add', 'delete').
+            attr_type: The type of attribute (e.g., 'variable', 'label').
+            name: The name of the attribute or variable.
+            value: The new value. Defaults to None.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the alteration fails.
 
-        Raises
-        ------
-        RuntimeError
-            If the alteration fails.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _alter() -> None:
             with self._lock:
-                self.client.alter(path, alter_type, name, value)
+                if value is None:
+                    self.client.alter(path, alter_type, attr_type, name)
+                else:
+                    self.client.alter(path, alter_type, attr_type, name, value)
 
         try:
             await asyncio.to_thread(_alter)
         except RuntimeError as e:
-            raise RuntimeError(f"Failed to alter {path} ({alter_type} {name}={value}): {e}") from e
+            raise RuntimeError(f"Failed to alter {path} ({alter_type} {attr_type} {name}={value}): {e}") from e
 
     async def requeue(self, path: str) -> None:
         """
         Requeue a node.
 
-        Parameters
-        ----------
-        path : str
-            The absolute path to the node.
+        Args:
+            path: The absolute path to the node.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the node cannot be requeued.
 
-        Raises
-        ------
-        RuntimeError
-            If the node cannot be requeued.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _requeue() -> None:
@@ -398,19 +305,12 @@ class EcflowClient:
         """
         Restart the ecFlow server (resume from HALTED state).
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the server cannot be restarted.
 
-        Raises
-        ------
-        RuntimeError
-            If the server cannot be restarted.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _restart() -> None:
@@ -426,19 +326,12 @@ class EcflowClient:
         """
         Halt the ecFlow server (suspend scheduling).
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the server cannot be halted.
 
-        Raises
-        ------
-        RuntimeError
-            If the server cannot be halted.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _halt() -> None:
@@ -454,20 +347,15 @@ class EcflowClient:
         """
         Retrieve the ecFlow client version.
 
-        Returns
-        -------
-        str
+        Returns:
             The client version string.
 
-        Raises
-        ------
-        RuntimeError
-            If the version cannot be retrieved.
+        Raises:
+            RuntimeError: If the version cannot be retrieved.
 
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _version() -> str:
@@ -483,20 +371,15 @@ class EcflowClient:
         """
         Retrieve the ecFlow server version.
 
-        Returns
-        -------
-        str
+        Returns:
             The server version string.
 
-        Raises
-        ------
-        RuntimeError
-            If the server version cannot be retrieved.
+        Raises:
+            RuntimeError: If the server version cannot be retrieved.
 
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _server_version() -> str:
@@ -512,24 +395,15 @@ class EcflowClient:
         """
         Load an ecFlow definition file to the server.
 
-        Parameters
-        ----------
-        filepath : str
-            The path to the .def file.
+        Args:
+            filepath: The path to the .def file.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the file cannot be loaded.
 
-        Raises
-        ------
-        RuntimeError
-            If the file cannot be loaded.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _load() -> None:
@@ -545,24 +419,15 @@ class EcflowClient:
         """
         Begin playback of a suite.
 
-        Parameters
-        ----------
-        name : str
-            The name of the suite to begin.
+        Args:
+            name: The name of the suite to begin.
 
-        Returns
-        -------
-        None
+        Raises:
+            RuntimeError: If the suite cannot be started.
 
-        Raises
-        ------
-        RuntimeError
-            If the suite cannot be started.
-
-        Notes
-        -----
-        This is an async method that runs the blocking call in a separate thread.
-        It uses a threading lock to protect the persistent client instance.
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+            It uses a threading lock to protect the persistent client instance.
         """
 
         def _begin() -> None:

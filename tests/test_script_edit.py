@@ -13,20 +13,23 @@ def mock_app():
 
 
 @pytest.mark.asyncio
-async def test_action_edit_script_success(mock_app):
+async def test_edit_script_worker_success(mock_app):
     node_path = "/suite/task"
-    old_content = "old content"
-    mock_app.ecflow_client.file.return_value = old_content
+    content = "test content"
+    mock_app.ecflow_client.file.return_value = content
+
     with (
-        patch.object(mock_app, "get_selected_path", return_value=node_path),
         patch("tempfile.NamedTemporaryFile") as mock_temp,
-        patch.object(mock_app, "_run_editor"),
+        patch.object(mock_app, "_run_editor") as mock_run_editor,
     ):
         mock_file = MagicMock()
-        mock_temp.return_value.__enter__.return_value = mock_file
         mock_file.name = "/tmp/fake.ecf"
+        mock_temp.return_value.__enter__.return_value = mock_file
+
         await mock_app._edit_script_worker(node_path)
+
         mock_app.ecflow_client.file.assert_called_with(node_path, "script")
+        mock_run_editor.assert_called_with("/tmp/fake.ecf", node_path, content)
 
 
 @pytest.mark.asyncio
@@ -42,4 +45,4 @@ async def test_finish_edit_updates_server(mock_app):
         patch.object(mock_app, "_prompt_requeue"),
     ):
         await mock_app._finish_edit(temp_path, node_path, old_content)
-        mock_app.ecflow_client.alter.assert_called_with(node_path, "change", "script", new_content)
+        mock_app.ecflow_client.alter.assert_called_with(node_path, "change", "script", "", new_content)
