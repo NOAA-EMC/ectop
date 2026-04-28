@@ -11,7 +11,7 @@ Tests for refactored logic and new features.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -24,7 +24,11 @@ from ectop.widgets.sidebar import SuiteTree
 @pytest.fixture
 def app() -> Ectop:
     """Create a mock Ectop app."""
-    return Ectop()
+    app = Ectop()
+    # Mock notify and copy_to_clipboard to avoid AsyncMock issues
+    app.notify = MagicMock()
+    app.copy_to_clipboard = MagicMock()
+    return app
 
 
 def test_action_requeue(app: Ectop) -> None:
@@ -37,32 +41,29 @@ def test_action_requeue(app: Ectop) -> None:
         mock_run.assert_called_once_with("requeue", "/s1/t1")
 
 
-def test_action_copy_path(app: Ectop) -> None:
+def test_action_copy_path() -> None:
     """Test action_copy_path copies to clipboard and notifies the user."""
     # Test with clipboard support
-    with (
-        patch.object(app, "copy_to_clipboard") as mock_copy,
-        patch.object(app, "notify") as mock_notify,
-        patch.object(app, "get_selected_path", return_value="/s1/t1"),
-    ):
-        app.action_copy_path()
-        mock_copy.assert_called_once_with("/s1/t1")
-        mock_notify.assert_called_once_with("Copied to clipboard: /s1/t1")
+    app = MagicMock()
+    app.get_selected_path.return_value = "/s1/t1"
+    Ectop.action_copy_path(app)
+    app.copy_to_clipboard.assert_called_once_with("/s1/t1")
+    app.notify.assert_called_once_with("Copied to clipboard: /s1/t1")
 
     # Test without clipboard support
-    mock_app = MagicMock(spec=Ectop)
-    # Remove it if it exists on the spec
-    if hasattr(mock_app, "copy_to_clipboard"):
-        del mock_app.copy_to_clipboard
-
-    mock_app.get_selected_path.return_value = "/s1/t1"
-    Ectop.action_copy_path(mock_app)
-    mock_app.notify.assert_called_once_with("Node path: /s1/t1")
+    app_no_clip = MagicMock()
+    del app_no_clip.copy_to_clipboard
+    app_no_clip.get_selected_path.return_value = "/s1/t1"
+    Ectop.action_copy_path(app_no_clip)
+    app_no_clip.notify.assert_called_once_with("Node path: /s1/t1")
 
 
 def test_why_inspector_nested_parsing() -> None:
     """Test WhyInspector handles nested parentheses and operators."""
     mock_client = MagicMock()
+    # Explicitly mock any potential async methods as sync mocks to avoid
+    # AsyncMock being automatically created for undefined attributes
+    mock_client.sync_local = MagicMock()
     inspector = WhyInspector("/path", mock_client)
 
     parent_data = DepData("Parent")

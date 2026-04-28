@@ -23,8 +23,7 @@ def mock_node() -> MagicMock:
     """
     Create a mock ecFlow node.
 
-    Returns
-    -------
+    Returns:
     MagicMock
         A mock ecFlow node object.
     """
@@ -38,8 +37,7 @@ def test_should_show_node_no_filter(mock_node: MagicMock) -> None:
     """
     Test _should_show_node when no filter is active.
 
-    Parameters
-    ----------
+    Parameters:
     mock_node : MagicMock
         The mock ecFlow node.
     """
@@ -52,8 +50,7 @@ def test_should_show_node_match(mock_node: MagicMock) -> None:
     """
     Test _should_show_node when the node state matches the filter.
 
-    Parameters
-    ----------
+    Parameters:
     mock_node : MagicMock
         The mock ecFlow node.
     """
@@ -66,8 +63,7 @@ def test_should_show_node_mismatch(mock_node: MagicMock) -> None:
     """
     Test _should_show_node when the node state doesn't match the filter.
 
-    Parameters
-    ----------
+    Parameters:
     mock_node : MagicMock
         The mock ecFlow node.
     """
@@ -80,8 +76,7 @@ def test_should_show_node_recursive_match(mock_node: MagicMock) -> None:
     """
     Test _should_show_node when a child node matches the filter.
 
-    Parameters
-    ----------
+    Parameters:
     mock_node : MagicMock
         The mock ecFlow node.
     """

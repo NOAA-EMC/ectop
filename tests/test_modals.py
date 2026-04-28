@@ -17,12 +17,13 @@ def mock_client():
 
 @pytest.mark.asyncio
 async def test_variable_tweaker_workers(mock_client):
+    """Test variable tweaker logic for deleting and adding variables."""
     with patch.object(VariableTweaker, "app", new_callable=PropertyMock) as mock_app:
-        mock_app.return_value = AsyncMock()
+        mock_app.return_value = MagicMock()
         tweaker = VariableTweaker("/node", mock_client)
         tweaker.query_one = MagicMock()
 
-        with patch.object(tweaker, "refresh_vars", new_callable=AsyncMock):
+        with patch.object(tweaker, "refresh_vars", new_callable=MagicMock):
             await tweaker._delete_variable_logic("VAR1")
             mock_client.alter.assert_called_with("/node", "delete", "variable", "VAR1")
 
@@ -32,8 +33,9 @@ async def test_variable_tweaker_workers(mock_client):
 
 @pytest.mark.asyncio
 async def test_why_inspector_worker(mock_client):
+    """Test why inspector logic for refreshing dependencies."""
     with patch.object(WhyInspector, "app", new_callable=PropertyMock) as mock_app:
-        mock_app.return_value = AsyncMock()
+        mock_app.return_value = MagicMock()
         inspector = WhyInspector("/node", mock_client)
         tree = MagicMock()
         with patch.object(inspector, "_gather_dependency_data"), patch.object(inspector, "_update_tree_ui"):

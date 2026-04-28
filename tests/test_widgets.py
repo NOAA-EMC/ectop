@@ -63,8 +63,7 @@ def test_main_content_updates() -> None:
     """
     Test that MainContent updates its tabs correctly.
 
-    Returns
-    -------
+    Returns:
     None
     """
     mc = MainContent()

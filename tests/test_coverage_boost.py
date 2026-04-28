@@ -11,7 +11,7 @@ Additional tests to boost coverage and verify new functionality.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -23,10 +23,13 @@ from ectop.widgets.modals.why import WhyInspector
 async def test_app_action_requeue():
     """Verify that action_requeue correctly calls the client."""
     mock_client = AsyncMock()
+    mock_client.get_defs.return_value = MagicMock()
     with patch("ectop.app.EcflowClient", return_value=mock_client):
         app = Ectop()
         # Mock call_from_thread to avoid thread-check issues in run_test
         app.call_from_thread = lambda callback, *args, **kwargs: callback(*args, **kwargs)
+        # Mock notify
+        app.notify = MagicMock()
 
         async with app.run_test() as pilot:
             with patch.object(Ectop, "get_selected_path", return_value="/suite/task"):
@@ -39,18 +42,20 @@ async def test_app_action_requeue():
 async def test_app_action_copy_path():
     """Verify that action_copy_path notifies the user."""
     mock_client = AsyncMock()
+    mock_client.get_defs.return_value = MagicMock()
     with patch("ectop.app.EcflowClient", return_value=mock_client):
         app = Ectop()
         # Mock call_from_thread to avoid thread-check issues in run_test
         app.call_from_thread = lambda callback, *args, **kwargs: callback(*args, **kwargs)
 
-        async with app.run_test() as pilot:
-            with patch.object(Ectop, "get_selected_path", return_value="/suite/task"):
-                app.action_copy_path()
-                await pilot.pause()
-                assert len(app._notifications) > 0
-                notification = list(app._notifications)[-1]
-                assert "/suite/task" in str(notification.message)
+        with patch.object(app, "notify") as mock_notify:
+            async with app.run_test() as pilot:
+                with patch.object(Ectop, "get_selected_path", return_value="/suite/task"):
+                    app.action_copy_path()
+                    await pilot.pause()
+                    mock_notify.assert_called()
+                    args, _ = mock_notify.call_args
+                    assert "/suite/task" in args[0]
 
 
 @pytest.mark.asyncio
@@ -60,13 +65,13 @@ async def test_why_inspector_error_handling():
     inspector = WhyInspector("/node", mock_client)
 
     with patch.object(WhyInspector, "app", new_callable=PropertyMock) as mock_app:
-        app_mock = AsyncMock()
+        app_mock = MagicMock()
         mock_app.return_value = app_mock
         # Mock call_from_thread to execute the callback immediately
         app_mock.call_from_thread = lambda f, *args, **kwargs: f(*args, **kwargs)
 
-        tree = AsyncMock()
-        tree.root = AsyncMock()
+        tree = MagicMock()
+        tree.root = MagicMock()
 
         # Test RuntimeError
         mock_client.sync_local.side_effect = RuntimeError("Sync failed")
