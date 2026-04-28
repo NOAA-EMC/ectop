@@ -8,7 +8,6 @@ Tests for error paths and robustness in the Ectop app.
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -128,7 +127,7 @@ async def test_initial_connect_failure():
     app = Ectop(host="localhost", port=1)
     app.notify = MagicMock()
 
-    with patch("ectop.app.SuiteTree") as mock_tree_cls:
+    with patch("ectop.app.SuiteTree"):
         mock_tree = MagicMock()
         app.query_one = MagicMock(return_value=mock_tree)
 

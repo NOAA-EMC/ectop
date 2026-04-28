@@ -28,7 +28,7 @@ def real_defs(ecflow_server) -> ecflow.Defs:
 
     defs = ecflow.Defs()
     suite = defs.add_suite("suite")
-    suite.add_task("test_node.1") # Dots are allowed, dashes are NOT
+    suite.add_task("test_node.1")  # Dots are allowed, dashes are NOT
     suite.add_task("other_node")
     suite.add_task("aborted_node")
 
@@ -224,7 +224,7 @@ def test_gather_dependency_data_times(client_instance, ecflow_server):
     task = suite.add_task("t_time")
     task.add_time("10:00")
     task.add_date(1, 1, 2024)
-    task.add_cron(ecflow.Cron("10:00", days_of_week=[0,1,2,3,4,5,6]))
+    task.add_cron(ecflow.Cron("10:00", days_of_week=[0, 1, 2, 3, 4, 5, 6]))
 
     ecf_client.load(defs, force=True)
     ecf_client.sync_local()

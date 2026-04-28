@@ -123,7 +123,7 @@ async def test_suite_tree_select_by_path_worker(ecflow_server) -> None:
     client = ecflow.Client(host, int(port))
 
     defs = ecflow.Defs()
-    suite = defs.add_suite("s1")
+    defs.add_suite("s1")
     client.load(defs, force=True)
     client.sync_local()
     real_defs = client.get_defs()
