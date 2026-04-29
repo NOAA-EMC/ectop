@@ -38,6 +38,7 @@ from ectop.constants import (
     ICON_TIME,
     ICON_UNKNOWN,
 )
+from ectop.utils import safe_call_app
 
 # Pre-compile the regex for expression parsing to improve performance
 EXPR_RE = re.compile(r"(!?\s*)(/[a-zA-Z0-9_\-\./]+)(\s*(==|!=|<=|>=|<|>)\s*(\w+))?")
@@ -196,18 +197,12 @@ class WhyInspector(ModalScreen[None]):
         -------
         None
         """
-        tree = self.query_one("#dep_tree", Tree)
-        self._refresh_deps_worker(tree)
+        self._refresh_deps_worker()
 
-    @work
-    async def _refresh_deps_worker(self, tree: Tree) -> None:
+    @work(thread=True)
+    def _refresh_deps_worker(self) -> None:
         """
         Worker to fetch dependencies from the server and rebuild the tree.
-
-        Parameters
-        ----------
-        tree : Tree
-            The tree widget to refresh.
 
         Returns
         -------
@@ -215,18 +210,13 @@ class WhyInspector(ModalScreen[None]):
 
         Notes
         -----
-        This is an async background worker.
+        This is a background thread worker.
         """
-        await self._refresh_deps_logic(tree)
+        self._refresh_deps_logic()
 
-    async def _refresh_deps_logic(self, tree: Tree) -> None:
+    def _refresh_deps_logic(self) -> None:
         """
         The actual logic for fetching dependencies and updating the UI tree.
-
-        Parameters
-        ----------
-        tree : Tree
-            The tree widget to refresh.
 
         Returns
         -------
@@ -237,28 +227,29 @@ class WhyInspector(ModalScreen[None]):
         RuntimeError
             If server synchronization fails.
         """
+        tree = self.query_one("#dep_tree", Tree)
         try:
-            await self.client.sync_local()
-            defs = await self.client.get_defs()
+            self.client.sync_local_sync()
+            defs = self.client.get_defs_sync()
             if not defs:
-                self._update_tree_ui(tree, DepData("Server Empty"))
+                safe_call_app(self.app, self._update_tree_ui, tree, DepData("Server Empty"))
                 return
 
             node = defs.find_abs_node(self.node_path)
             if not node:
-                self._update_tree_ui(tree, DepData("Node not found"))
+                safe_call_app(self.app, self._update_tree_ui, tree, DepData("Node not found"))
                 return
 
             # Gather data (this is currently CPU-bound parsing)
             dep_data = self._gather_dependency_data(node, defs)
 
             # Update UI
-            self._update_tree_ui(tree, dep_data)
+            safe_call_app(self.app, self._update_tree_ui, tree, dep_data)
 
         except RuntimeError as e:
-            self._update_tree_ui(tree, DepData(f"Error: {e}"))
+            safe_call_app(self.app, self._update_tree_ui, tree, DepData(f"Error: {e}"))
         except Exception as e:
-            self._update_tree_ui(tree, DepData(f"Unexpected Error: {e}"))
+            safe_call_app(self.app, self._update_tree_ui, tree, DepData(f"Unexpected Error: {e}"))
 
     def _gather_dependency_data(self, node: Node, defs: Defs) -> DepData:
         """

@@ -317,7 +317,8 @@ class Ectop(App):
             This is an async background worker.
         """
         try:
-            self.ecflow_client = EcflowClient(self.host, self.port)
+            # Instantiate client in a thread to keep UI thread responsive
+            self.ecflow_client = await asyncio.to_thread(EcflowClient, self.host, self.port)
             await self.ecflow_client.ping()
             # Initial refresh
             self.action_refresh()
@@ -521,6 +522,14 @@ class Ectop(App):
         Cycle through tree filters.
         """
         self.query_one("#suite_tree", SuiteTree).action_cycle_filter()
+
+    def action_search(self) -> None:
+        """
+        Show the search box.
+        """
+        search_box = self.query_one("#search_box", SearchBox)
+        search_box.add_class("visible")
+        search_box.focus()
 
     def action_requeue(self) -> None:
         """
@@ -770,14 +779,6 @@ class Ectop(App):
                 self._run_client_command("requeue", path)
 
         self.push_screen(ConfirmModal(f"Re-queue {path} now?", do_requeue))
-
-    def action_search(self) -> None:
-        """
-        Show the search box.
-        """
-        search_box = self.query_one("#search_box", SearchBox)
-        search_box.add_class("visible")
-        search_box.focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """
