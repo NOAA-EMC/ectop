@@ -69,6 +69,7 @@ class SuiteTree(Tree[str]):
         self._all_paths_cache: list[str] | None = None
         self._visibility_cache: dict[str, set[str]] = {}
         self._search_paths_lower: list[str] = []
+        self._last_selected_path: str | None = None
 
     def update_tree(self, client_host: str, client_port: int, defs: Defs | None) -> None:
         """
@@ -107,7 +108,22 @@ class SuiteTree(Tree[str]):
     def _rebuild_tree(self) -> None:
         """
         Rebuild the tree from ecFlow definitions using lazy loading.
+
+        Notes:
+            This method captures the current selection path to restore it
+            after the background population worker finishes.
         """
+        # Capture current selection to restore it after rebuild
+        try:
+            cursor_node = getattr(self, "cursor_node", None)
+            if cursor_node and cursor_node.data:
+                self._last_selected_path = str(cursor_node.data)
+            elif cursor_node == self.root:
+                self._last_selected_path = "/"
+        except (AttributeError, RuntimeError):
+            # Fail gracefully if cursor_node is inaccessible during clear/rebuild
+            self._last_selected_path = None
+
         self.clear()
         if not self.defs:
             self.root.label = "Server Empty"
@@ -221,6 +237,12 @@ class SuiteTree(Tree[str]):
         for i in range(0, len(suites), batch_size):
             batch = suites[i : i + batch_size]
             self._safe_call(self._add_nodes_batch, self.root, batch)
+
+        # Restore selection if we have a saved path
+        if self._last_selected_path:
+            path_to_restore = self._last_selected_path
+            self._last_selected_path = None
+            self._select_by_path_logic(path_to_restore)
 
     def _add_nodes_batch(self, parent_ui_node: TreeNode[str], ecflow_nodes: list[ecflow.Node]) -> None:
         """
