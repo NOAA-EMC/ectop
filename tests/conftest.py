@@ -18,6 +18,13 @@ def mock_work(*args, **kwargs):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
+            # Check if this was supposed to be a thread worker
+            if kwargs.get("thread") or (len(args) > 0 and isinstance(args[0], dict) and args[0].get("thread")):
+                # In tests, we still run it synchronously, but we must ensure
+                # it doesn't fail call_from_thread if it's mocked to run in the same thread.
+                # However, the simplest way is to just run it.
+                pass
+
             result = f(*args, **kwargs)
             if asyncio.iscoroutine(result):
                 # Run the coroutine in the current loop

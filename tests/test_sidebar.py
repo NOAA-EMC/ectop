@@ -9,8 +9,11 @@ Tests for the Sidebar (SuiteTree) widget.
     If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
+from __future__ import annotations
+
 import random
 import string
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import ecflow
@@ -19,20 +22,36 @@ from rich.text import Text
 
 from ectop.widgets.sidebar import SuiteTree
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 @pytest.fixture
-def unique_suite_names():
-    def _generator(n):
+def unique_suite_names() -> Callable[[int], list[str]]:
+    """
+    Fixture to generate unique suite names.
+
+    Returns:
+        A function that generates n unique suite names.
+    """
+
+    def _generator(n: int) -> list[str]:
         return ["s" + "".join(random.choices(string.ascii_lowercase, k=8)) for _ in range(n)]
 
     return _generator
 
 
 @pytest.fixture
-def test_setup(ecflow_server, unique_suite_names):
+def test_setup(ecflow_server: str, unique_suite_names: Callable[[int], list[str]]) -> tuple[list[str], ecflow.Defs]:
     """
     Setup a unique set of suites for a test.
-    Returns (suite_names, defs)
+
+    Args:
+        ecflow_server: The host:port of the live ecFlow server.
+        unique_suite_names: Fixture to generate unique suite names.
+
+    Returns:
+        tuple[list[str], ecflow.Defs]: A tuple containing the suite names and the definitions.
     """
     host, port = ecflow_server.split(":")
     client = ecflow.Client(host, int(port))
@@ -59,9 +78,12 @@ def test_setup(ecflow_server, unique_suite_names):
     return names, client.get_defs()
 
 
-def test_update_tree(test_setup) -> None:
+def test_update_tree(test_setup: tuple[list[str], ecflow.Defs]) -> None:
     """
     Test that update_tree clears and repopulates the tree.
+
+    Args:
+        test_setup: Fixture providing test data.
     """
     names, real_defs = test_setup
     tree = SuiteTree("Test")
@@ -77,9 +99,12 @@ def test_update_tree(test_setup) -> None:
         mock_worker.assert_called_once()
 
 
-def test_load_children(test_setup) -> None:
+def test_load_children(test_setup: tuple[list[str], ecflow.Defs]) -> None:
     """
     Test that _load_children calls the worker.
+
+    Args:
+        test_setup: Fixture providing test data.
     """
     names, real_defs = test_setup
     tree = SuiteTree("Test")
@@ -107,9 +132,12 @@ def test_load_children(test_setup) -> None:
         mock_worker.assert_called_with(ui_node, suite_path)
 
 
-def test_load_children_worker(test_setup) -> None:
+def test_load_children_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None:
     """
     Test that the worker correctly schedules node additions.
+
+    Args:
+        test_setup: Fixture providing test data.
     """
     names, real_defs = test_setup
     tree = SuiteTree("Test")
@@ -139,9 +167,12 @@ def test_load_children_worker(test_setup) -> None:
         assert args[2][0].name() == "t2a"
 
 
-def test_select_by_path(test_setup) -> None:
+def test_select_by_path(test_setup: tuple[list[str], ecflow.Defs]) -> None:
     """
     Test that select_by_path expands and selects the correct node.
+
+    Args:
+        test_setup: Fixture providing test data.
     """
     names, real_defs = test_setup
     tree = SuiteTree("Test")
@@ -178,9 +209,12 @@ def test_select_by_path(test_setup) -> None:
         mock_app.call_from_thread.assert_called_with(mock_select, child_t2a)
 
 
-def test_find_and_select_caching(test_setup) -> None:
+def test_find_and_select_caching(test_setup: tuple[list[str], ecflow.Defs]) -> None:
     """
     Test that find_and_select uses the path cache.
+
+    Args:
+        test_setup: Fixture providing test data.
     """
     names, real_defs = test_setup
     tree = SuiteTree("Test")
@@ -221,8 +255,13 @@ def test_find_and_select_caching(test_setup) -> None:
             assert tree._all_paths_cache is None
 
 
-def test_should_show_node(test_setup) -> None:
-    """Test the filtering logic for nodes."""
+def test_should_show_node(test_setup: tuple[list[str], ecflow.Defs]) -> None:
+    """
+    Test the filtering logic for nodes.
+
+    Args:
+        test_setup: Fixture providing test data.
+    """
     names, real_defs = test_setup
     tree = SuiteTree("Test")
     tree.defs = real_defs
@@ -234,6 +273,10 @@ def test_should_show_node(test_setup) -> None:
     suite1 = real_defs.find_suite(names[0])  # s1/t1 is complete
     suite2 = real_defs.find_suite(names[1])  # s2 is active, s2/t2a is aborted
     task2a = real_defs.find_abs_node(f"/{names[1]}/t2a")
+
+    assert suite1 is not None
+    assert suite2 is not None
+    assert task2a is not None
 
     # No filter
     tree.current_filter = None
@@ -251,7 +294,9 @@ def test_should_show_node(test_setup) -> None:
 
 
 def test_action_cycle_filter() -> None:
-    """Test cycling through status filters."""
+    """
+    Test cycling through status filters.
+    """
     tree = SuiteTree("Test")
     with patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop:
         mock_app = MagicMock()
@@ -271,8 +316,13 @@ def test_action_cycle_filter() -> None:
         mock_app.notify.assert_called_with("Filter: All")
 
 
-def test_populate_tree_worker(test_setup) -> None:
-    """Test the background worker for tree population."""
+def test_populate_tree_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None:
+    """
+    Test the background worker for tree population.
+
+    Args:
+        test_setup: Fixture providing test data.
+    """
     names, real_defs = test_setup
     tree = SuiteTree("Test")
     tree.defs = real_defs

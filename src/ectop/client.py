@@ -53,6 +53,19 @@ class EcflowClient:
         except RuntimeError as e:
             raise RuntimeError(f"Failed to initialize ecFlow client for {host}:{port}: {e}") from e
 
+    def ping_sync(self) -> None:
+        """
+        Synchronously ping the ecFlow server.
+
+        Raises:
+            RuntimeError: If the server is unreachable or the ping fails.
+        """
+        with self._lock:
+            try:
+                self.client.ping()
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to ping ecFlow server at {self.host}:{self.port}: {e}") from e
+
     async def ping(self) -> None:
         """
         Ping the ecFlow server to check connectivity.
@@ -62,17 +75,21 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.ping_sync)
 
-        def _ping() -> None:
-            with self._lock:
-                self.client.ping()
+    def sync_local_sync(self) -> None:
+        """
+        Synchronously synchronize the local definition with the server.
 
-        try:
-            await asyncio.to_thread(_ping)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to ping ecFlow server at {self.host}:{self.port}: {e}") from e
+        Raises:
+            RuntimeError: If synchronization fails.
+        """
+        with self._lock:
+            try:
+                self.client.sync_local()
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to sync with ecFlow server: {e}") from e
 
     async def sync_local(self) -> None:
         """
@@ -83,17 +100,24 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.sync_local_sync)
 
-        def _sync() -> None:
-            with self._lock:
-                self.client.sync_local()
+    def get_defs_sync(self) -> Defs | None:
+        """
+        Synchronously retrieve the current definitions from the client.
 
-        try:
-            await asyncio.to_thread(_sync)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to sync with ecFlow server: {e}") from e
+        Returns:
+            The ecFlow definitions, or None if not available.
+
+        Raises:
+            RuntimeError: If the definitions cannot be retrieved.
+        """
+        with self._lock:
+            try:
+                return self.client.get_defs()
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to get definitions from client: {e}") from e
 
     async def get_defs(self) -> Defs | None:
         """
@@ -107,17 +131,28 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        return await asyncio.to_thread(self.get_defs_sync)
 
-        def _get_defs() -> Defs | None:
-            with self._lock:
-                return self.client.get_defs()
+    def file_sync(self, path: str, file_type: str) -> str:
+        """
+        Synchronously retrieve a file (log, script, job) for a specific node.
 
-        try:
-            return await asyncio.to_thread(_get_defs)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to get definitions from client: {e}") from e
+        Args:
+            path: The absolute path to the node.
+            file_type: The type of file to retrieve ('jobout', 'script', 'job').
+
+        Returns:
+            The content of the requested file.
+
+        Raises:
+            RuntimeError: If the file cannot be retrieved.
+        """
+        with self._lock:
+            try:
+                return self.client.get_file(path, file_type)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to retrieve {file_type} for {path}: {e}") from e
 
     async def file(self, path: str, file_type: str) -> str:
         """
@@ -135,17 +170,24 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        return await asyncio.to_thread(self.file_sync, path, file_type)
 
-        def _get_file() -> str:
-            with self._lock:
-                return self.client.get_file(path, file_type)
+    def suspend_sync(self, path: str) -> None:
+        """
+        Synchronously suspend a node.
 
-        try:
-            return await asyncio.to_thread(_get_file)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to retrieve {file_type} for {path}: {e}") from e
+        Args:
+            path: The absolute path to the node.
+
+        Raises:
+            RuntimeError: If the node cannot be suspended.
+        """
+        with self._lock:
+            try:
+                self.client.suspend(path)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to suspend {path}: {e}") from e
 
     async def suspend(self, path: str) -> None:
         """
@@ -159,17 +201,24 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.suspend_sync, path)
 
-        def _suspend() -> None:
-            with self._lock:
-                self.client.suspend(path)
+    def resume_sync(self, path: str) -> None:
+        """
+        Synchronously resume a suspended node.
 
-        try:
-            await asyncio.to_thread(_suspend)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to suspend {path}: {e}") from e
+        Args:
+            path: The absolute path to the node.
+
+        Raises:
+            RuntimeError: If the node cannot be resumed.
+        """
+        with self._lock:
+            try:
+                self.client.resume(path)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to resume {path}: {e}") from e
 
     async def resume(self, path: str) -> None:
         """
@@ -183,17 +232,24 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.resume_sync, path)
 
-        def _resume() -> None:
-            with self._lock:
-                self.client.resume(path)
+    def kill_sync(self, path: str) -> None:
+        """
+        Synchronously kill a running task.
 
-        try:
-            await asyncio.to_thread(_resume)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to resume {path}: {e}") from e
+        Args:
+            path: The absolute path to the node.
+
+        Raises:
+            RuntimeError: If the node cannot be killed.
+        """
+        with self._lock:
+            try:
+                self.client.kill(path)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to kill {path}: {e}") from e
 
     async def kill(self, path: str) -> None:
         """
@@ -207,17 +263,27 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.kill_sync, path)
 
-        def _kill() -> None:
-            with self._lock:
-                self.client.kill(path)
+    def force_complete_sync(self, path: str) -> None:
+        """
+        Synchronously force a node to the complete state.
 
-        try:
-            await asyncio.to_thread(_kill)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to kill {path}: {e}") from e
+        Args:
+            path: The absolute path to the node.
+
+        Raises:
+            RuntimeError: If the node state cannot be forced.
+        """
+        with self._lock:
+            try:
+                try:
+                    self.client.force_complete(path)
+                except AttributeError:
+                    self.client.force_state(path, ecflow.State.complete)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to force complete {path}: {e}") from e
 
     async def force_complete(self, path: str) -> None:
         """
@@ -231,20 +297,31 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.force_complete_sync, path)
 
-        def _force_complete() -> None:
-            with self._lock:
-                try:
-                    self.client.force_complete(path)
-                except AttributeError:
-                    self.client.force_state(path, ecflow.State.complete)
+    def alter_sync(self, path: str, alter_type: str, attr_type: str, name: str = "", value: str | None = None) -> None:
+        """
+        Synchronously alter a node attribute or variable.
 
-        try:
-            await asyncio.to_thread(_force_complete)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to force complete {path}: {e}") from e
+        Args:
+            path: The absolute path to the node.
+            alter_type: The type of alteration (e.g., 'change', 'add', 'delete').
+            attr_type: The type of attribute (e.g., 'variable', 'label').
+            name: The name of the attribute or variable.
+            value: The new value. Defaults to None.
+
+        Raises:
+            RuntimeError: If the alteration fails.
+        """
+        with self._lock:
+            try:
+                if value is None:
+                    self.client.alter(path, alter_type, attr_type, name)
+                else:
+                    self.client.alter(path, alter_type, attr_type, name, value)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to alter {path} ({alter_type} {attr_type} {name}={value}): {e}") from e
 
     async def alter(self, path: str, alter_type: str, attr_type: str, name: str = "", value: str | None = None) -> None:
         """
@@ -262,20 +339,24 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.alter_sync, path, alter_type, attr_type, name, value)
 
-        def _alter() -> None:
-            with self._lock:
-                if value is None:
-                    self.client.alter(path, alter_type, attr_type, name)
-                else:
-                    self.client.alter(path, alter_type, attr_type, name, value)
+    def requeue_sync(self, path: str) -> None:
+        """
+        Synchronously requeue a node.
 
-        try:
-            await asyncio.to_thread(_alter)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to alter {path} ({alter_type} {attr_type} {name}={value}): {e}") from e
+        Args:
+            path: The absolute path to the node.
+
+        Raises:
+            RuntimeError: If the node cannot be requeued.
+        """
+        with self._lock:
+            try:
+                self.client.requeue(path)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to requeue {path}: {e}") from e
 
     async def requeue(self, path: str) -> None:
         """
@@ -289,17 +370,21 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.requeue_sync, path)
 
-        def _requeue() -> None:
-            with self._lock:
-                self.client.requeue(path)
+    def restart_server_sync(self) -> None:
+        """
+        Synchronously restart the ecFlow server.
 
-        try:
-            await asyncio.to_thread(_requeue)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to requeue {path}: {e}") from e
+        Raises:
+            RuntimeError: If the server cannot be restarted.
+        """
+        with self._lock:
+            try:
+                self.client.restart_server()
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to restart server: {e}") from e
 
     async def restart_server(self) -> None:
         """
@@ -310,17 +395,21 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.restart_server_sync)
 
-        def _restart() -> None:
-            with self._lock:
-                self.client.restart_server()
+    def halt_server_sync(self) -> None:
+        """
+        Synchronously halt the ecFlow server.
 
-        try:
-            await asyncio.to_thread(_restart)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to restart server: {e}") from e
+        Raises:
+            RuntimeError: If the server cannot be halted.
+        """
+        with self._lock:
+            try:
+                self.client.halt_server()
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to halt server: {e}") from e
 
     async def halt_server(self) -> None:
         """
@@ -331,17 +420,24 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.halt_server_sync)
 
-        def _halt() -> None:
-            with self._lock:
-                self.client.halt_server()
+    def version_sync(self) -> str:
+        """
+        Synchronously retrieve the ecFlow client version.
 
-        try:
-            await asyncio.to_thread(_halt)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to halt server: {e}") from e
+        Returns:
+            The client version string.
+
+        Raises:
+            RuntimeError: If the version cannot be retrieved.
+        """
+        with self._lock:
+            try:
+                return str(self.client.version())
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to get client version: {e}") from e
 
     async def version(self) -> str:
         """
@@ -355,17 +451,24 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        return await asyncio.to_thread(self.version_sync)
 
-        def _version() -> str:
-            with self._lock:
-                return str(self.client.version())
+    def server_version_sync(self) -> str:
+        """
+        Synchronously retrieve the ecFlow server version.
 
-        try:
-            return await asyncio.to_thread(_version)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to get client version: {e}") from e
+        Returns:
+            The server version string.
+
+        Raises:
+            RuntimeError: If the server version cannot be retrieved.
+        """
+        with self._lock:
+            try:
+                return str(self.client.server_version())
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to get server version: {e}") from e
 
     async def server_version(self) -> str:
         """
@@ -379,17 +482,24 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        return await asyncio.to_thread(self.server_version_sync)
 
-        def _server_version() -> str:
-            with self._lock:
-                return str(self.client.server_version())
+    def load_defs_sync(self, filepath: str) -> None:
+        """
+        Synchronously load an ecFlow definition file to the server.
 
-        try:
-            return await asyncio.to_thread(_server_version)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to get server version: {e}") from e
+        Args:
+            filepath: The path to the .def file.
+
+        Raises:
+            RuntimeError: If the file cannot be loaded.
+        """
+        with self._lock:
+            try:
+                self.client.load(filepath)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to load definition file {filepath}: {e}") from e
 
     async def load_defs(self, filepath: str) -> None:
         """
@@ -403,17 +513,24 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.load_defs_sync, filepath)
 
-        def _load() -> None:
-            with self._lock:
-                self.client.load(filepath)
+    def begin_suite_sync(self, name: str) -> None:
+        """
+        Synchronously begin playback of a suite.
 
-        try:
-            await asyncio.to_thread(_load)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to load definition file {filepath}: {e}") from e
+        Args:
+            name: The name of the suite to begin.
+
+        Raises:
+            RuntimeError: If the suite cannot be started.
+        """
+        with self._lock:
+            try:
+                self.client.begin_suite(name)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to begin suite {name}: {e}") from e
 
     async def begin_suite(self, name: str) -> None:
         """
@@ -427,14 +544,102 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
-            It uses a threading lock to protect the persistent client instance.
         """
+        await asyncio.to_thread(self.begin_suite_sync, name)
 
-        def _begin() -> None:
-            with self._lock:
-                self.client.begin_suite(name)
+    def zombie_get_sync(self) -> list[ecflow.Zombie]:
+        """
+        Synchronously retrieve the list of zombies from the server.
 
-        try:
-            await asyncio.to_thread(_begin)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to begin suite {name}: {e}") from e
+        Returns:
+            List of zombie objects.
+
+        Raises:
+            RuntimeError: If retrieval fails.
+        """
+        with self._lock:
+            try:
+                return self.client.zombie_get()
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to get zombies: {e}") from e
+
+    async def zombie_get(self) -> list[ecflow.Zombie]:
+        """
+        Retrieve the list of zombies from the server.
+
+        Returns:
+            List of zombie objects.
+
+        Raises:
+            RuntimeError: If retrieval fails.
+
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+        """
+        return await asyncio.to_thread(self.zombie_get_sync)
+
+    def zombie_fob_sync(self, zombie: ecflow.Zombie) -> None:
+        """
+        Synchronously FOB a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        with self._lock:
+            try:
+                self.client.zombie_fob(zombie)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to FOB zombie: {e}") from e
+
+    async def zombie_fob(self, zombie: ecflow.Zombie) -> None:
+        """
+        FOB a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        await asyncio.to_thread(self.zombie_fob_sync, zombie)
+
+    def zombie_fail_sync(self, zombie: ecflow.Zombie) -> None:
+        """
+        Synchronously fail a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        with self._lock:
+            try:
+                self.client.zombie_fail(zombie)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to fail zombie: {e}") from e
+
+    async def zombie_fail(self, zombie: ecflow.Zombie) -> None:
+        """
+        Fail a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        await asyncio.to_thread(self.zombie_fail_sync, zombie)
+
+    def zombie_adopt_sync(self, zombie: ecflow.Zombie) -> None:
+        """
+        Synchronously adopt a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        with self._lock:
+            try:
+                self.client.zombie_adopt(zombie)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to adopt zombie: {e}") from e
+
+    async def zombie_adopt(self, zombie: ecflow.Zombie) -> None:
+        """
+        Adopt a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        await asyncio.to_thread(self.zombie_adopt_sync, zombie)

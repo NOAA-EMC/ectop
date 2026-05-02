@@ -51,6 +51,9 @@ class SuiteTree(Tree[str]):
     current_filter: reactive[str | None] = reactive(None, init=False)
     """The current status filter applied to the tree."""
 
+    focus_mode: reactive[bool] = reactive(False, init=False)
+    """Whether Focus Mode is active (hides complete nodes)."""
+
     defs: reactive[Defs | None] = reactive(None, init=False)
     """The ecFlow definitions to display."""
 
@@ -69,6 +72,7 @@ class SuiteTree(Tree[str]):
         self._all_paths_cache: list[str] | None = None
         self._visibility_cache: dict[str, set[str]] = {}
         self._search_paths_lower: list[str] = []
+        self._last_selected_path: str | None = None
 
     def update_tree(self, client_host: str, client_port: int, defs: Defs | None) -> None:
         """
@@ -104,10 +108,34 @@ class SuiteTree(Tree[str]):
         """
         self._rebuild_tree()
 
+    def watch_focus_mode(self, focus_mode: bool) -> None:
+        """
+        Watch for changes in focus mode and rebuild the tree.
+
+        Args:
+            focus_mode: The new focus mode value.
+        """
+        self._rebuild_tree()
+
     def _rebuild_tree(self) -> None:
         """
         Rebuild the tree from ecFlow definitions using lazy loading.
+
+        Notes:
+            This method captures the current selection path to restore it
+            after the background population worker finishes.
         """
+        # Capture current selection to restore it after rebuild
+        try:
+            cursor_node = getattr(self, "cursor_node", None)
+            if cursor_node and cursor_node.data:
+                self._last_selected_path = str(cursor_node.data)
+            elif cursor_node == self.root:
+                self._last_selected_path = "/"
+        except (AttributeError, RuntimeError):
+            # Fail gracefully if cursor_node is inaccessible during clear/rebuild
+            self._last_selected_path = None
+
         self.clear()
         if not self.defs:
             self.root.label = "Server Empty"
@@ -117,7 +145,8 @@ class SuiteTree(Tree[str]):
             return
 
         filter_str = f" [Filter: {self.current_filter}]" if self.current_filter else ""
-        self.root.label = f"{ICON_SERVER} {self.host}:{self.port}{filter_str}"
+        focus_str = " [Focus]" if self.focus_mode else ""
+        self.root.label = f"{ICON_SERVER} {self.host}:{self.port}{filter_str}{focus_str}"
 
         # Combine cache building and population triggering
         self._build_caches_and_populate()
@@ -222,6 +251,12 @@ class SuiteTree(Tree[str]):
             batch = suites[i : i + batch_size]
             self._safe_call(self._add_nodes_batch, self.root, batch)
 
+        # Restore selection if we have a saved path
+        if self._last_selected_path:
+            path_to_restore = self._last_selected_path
+            self._last_selected_path = None
+            self._select_by_path_logic(path_to_restore)
+
     def _add_nodes_batch(self, parent_ui_node: TreeNode[str], ecflow_nodes: list[ecflow.Node]) -> None:
         """
         Batch add nodes to the UI to reduce main thread pressure.
@@ -243,6 +278,9 @@ class SuiteTree(Tree[str]):
         Returns:
             True if the node or any of its descendants match the filter.
         """
+        if self.focus_mode and str(node.get_state()) == "complete":
+            return False
+
         if self.current_filter is None:
             return True
 
@@ -267,6 +305,14 @@ class SuiteTree(Tree[str]):
         self.current_filter = self.filters[next_idx]
 
         self.app.notify(f"Filter: {self.current_filter or 'All'}")
+
+    def action_toggle_focus(self) -> None:
+        """
+        Toggle Focus Mode and refresh the tree.
+        """
+        self.focus_mode = not self.focus_mode
+        state = "ON" if self.focus_mode else "OFF"
+        self.app.notify(f"Focus Mode: {state}")
 
     def _add_node_to_ui(self, parent_ui_node: TreeNode[str], ecflow_node: ecflow.Node) -> TreeNode[str]:
         """

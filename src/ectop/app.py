@@ -45,6 +45,7 @@ from ectop.widgets.content import MainContent
 from ectop.widgets.modals.load import LoadDefsModal
 from ectop.widgets.modals.variables import VariableTweaker
 from ectop.widgets.modals.why import WhyInspector
+from ectop.widgets.modals.zombies import ZombieDashboard
 from ectop.widgets.search import SearchBox
 from ectop.widgets.sidebar import SuiteTree
 from ectop.widgets.statusbar import StatusBar
@@ -87,6 +88,7 @@ class EctopCommands(Provider):
             ("Restart Server", app.action_restart_server, "Start server scheduling (RUNNING)"),
             ("Halt Server", app.action_halt_server, "Stop server scheduling (HALT)"),
             ("Toggle Live Log", app.action_toggle_live, "Toggle live log updates"),
+            ("Zombies", app.action_zombies, "Manage ecFlow zombies"),
             ("Quit", app.action_quit, "Quit the application"),
         ]
 
@@ -112,6 +114,31 @@ class Ectop(App):
     CSS = f"""
     Screen {{
         background: {COLOR_BG};
+    }}
+
+    #zombie_container {{
+        padding: 1 2;
+        background: {COLOR_BG};
+        border: thick {COLOR_BORDER};
+        width: 90%;
+        height: 80%;
+    }}
+
+    #zombie_title {{
+        text-align: center;
+        background: {COLOR_HEADER_BG};
+        color: white;
+        margin-bottom: 1;
+    }}
+
+    .modal_actions {{
+        align: center middle;
+        height: 3;
+        margin-top: 1;
+    }}
+
+    .modal_actions Button {{
+        margin: 0 1;
     }}
 
     StatusBar {{
@@ -239,6 +266,7 @@ class Ectop(App):
         Binding("k", "kill", "Kill"),
         Binding("f", "force", "Force Complete"),
         Binding("F", "cycle_filter", "Cycle Filter"),
+        Binding("H", "toggle_focus", "Focus Mode"),
         Binding("R", "requeue", "Requeue"),
         Binding("c", "copy_path", "Copy Path"),
         Binding("S", "restart_server", "Start Server"),
@@ -250,6 +278,7 @@ class Ectop(App):
         Binding("v", "variables", "Variables"),
         Binding("b", "begin", "Begin Suite"),
         Binding("L", "load_defs", "Load Defs"),
+        Binding("Z", "zombies", "Zombies"),
         Binding("ctrl+f", "search_content", "Search in Content"),
     ]
 
@@ -317,7 +346,8 @@ class Ectop(App):
             This is an async background worker.
         """
         try:
-            self.ecflow_client = EcflowClient(self.host, self.port)
+            # Instantiate client in a thread to keep UI thread responsive
+            self.ecflow_client = await asyncio.to_thread(EcflowClient, self.host, self.port)
             await self.ecflow_client.ping()
             # Initial refresh
             self.action_refresh()
@@ -468,6 +498,13 @@ class Ectop(App):
         except RuntimeError:
             content_area.show_error("#view_job", "File type 'job' not available.")
 
+        # 4. Timeline
+        tree = self.query_one("#suite_tree", SuiteTree)
+        if tree.defs:
+            node = tree.defs.find_abs_node(path)
+            if node:
+                content_area.update_timeline(node)
+
     @work
     async def _run_client_command(self, command_name: str, path: str | None) -> None:
         """
@@ -521,6 +558,20 @@ class Ectop(App):
         Cycle through tree filters.
         """
         self.query_one("#suite_tree", SuiteTree).action_cycle_filter()
+
+    def action_toggle_focus(self) -> None:
+        """
+        Toggle Focus Mode (hide complete nodes).
+        """
+        self.query_one("#suite_tree", SuiteTree).action_toggle_focus()
+
+    def action_search(self) -> None:
+        """
+        Show the search box.
+        """
+        search_box = self.query_one("#search_box", SearchBox)
+        search_box.add_class("visible")
+        search_box.focus()
 
     def action_requeue(self) -> None:
         """
@@ -643,6 +694,15 @@ class Ectop(App):
         if not self.ecflow_client:
             return
         self.push_screen(LoadDefsModal())
+
+    def action_zombies(self) -> None:
+        """
+        Show the zombie management dashboard.
+        """
+        if not self.ecflow_client:
+            self.notify("Client not initialized", severity="warning")
+            return
+        self.push_screen(ZombieDashboard(self.ecflow_client))
 
     @work
     async def _load_defs_worker(self, filepath: str) -> None:
@@ -770,14 +830,6 @@ class Ectop(App):
                 self._run_client_command("requeue", path)
 
         self.push_screen(ConfirmModal(f"Re-queue {path} now?", do_requeue))
-
-    def action_search(self) -> None:
-        """
-        Show the search box.
-        """
-        search_box = self.query_one("#search_box", SearchBox)
-        search_box.add_class("visible")
-        search_box.focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """

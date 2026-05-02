@@ -2,134 +2,163 @@
 # WARNING: If you modify features, API, or usage, you MUST update the
 # documentation immediately.
 # #############################################################################
-from __future__ import annotations
-
 import asyncio
+import os
 import sys
 from unittest.mock import MagicMock
 
-"""
-Script to capture TUI screenshots for documentation.
-
-.. note::
-    If you modify features, API, or usage, you MUST update the documentation immediately.
-"""
-
-# Create a more complete mock for ecflow to allow running without the real library
+# Mock ecflow before importing anything else
 mock_ecflow = MagicMock()
-sys.modules["ecflow"] = mock_ecflow
 
 
-class Node:
-    def __init__(self, name: str, parent: Node | None = None) -> None:
+class MockNode:
+    def __init__(self, name, parent=None):
         self._name = name
         self._parent = parent
+        self.nodes = []
+        self.variables = []
+        self.inlimits = []
 
-    def name(self) -> str:
+    def name(self):
         return self._name
 
-    def get_state(self) -> str:
+    def get_abs_node_path(self):
+        if self._parent:
+            return self._parent.get_abs_node_path().rstrip("/") + "/" + self._name
+        return "/" + self._name
+
+    def get_parent(self):
+        return self._parent
+
+    def get_state(self):
         return "active"
 
-    def is_suspended(self) -> bool:
-        return False
+    def get_generated_variables(self):
+        return []
 
-    def get_abs_node_path(self) -> str:
-        if self._parent:
-            return f"{self._parent.get_abs_node_path()}/{self._name}"
-        return f"/{self._name}"
+    def get_trigger(self):
+        return None
+
+    def get_complete(self):
+        return None
+
+    def get_why(self):
+        return "Testing"
+
+    def get_all_nodes(self):
+        res = []
+        for n in self.nodes:
+            res.append(n)
+            res.extend(n.get_all_nodes())
+        return res
 
 
-class Task(Node):
+class MockSuite(MockNode):
     pass
 
 
-class Family(Node):
-    def __init__(self, name: str, parent: Node | None = None, children: list[Node] | None = None) -> None:
-        super().__init__(name, parent)
-        self.nodes = children or []
-        for child in self.nodes:
-            child._parent = self
-
-    def get_all_nodes(self) -> list[Node]:
-        nodes: list[Node] = []
-        for node in self.nodes:
-            nodes.append(node)
-            if isinstance(node, Family):
-                nodes.extend(node.get_all_nodes())
-        return nodes
+class MockFamily(MockNode):
+    pass
 
 
-class Suite(Family):
-    def get_abs_node_path(self) -> str:
-        return f"/{self._name}"
-
-    def get_all_nodes(self) -> list[Node]:
-        nodes: list[Node] = []
-        for node in self.nodes:
-            nodes.append(node)
-            if isinstance(node, Family):
-                nodes.extend(node.get_all_nodes())
-        return nodes
+class MockTask(MockNode):
+    pass
 
 
-class Defs:
-    def __init__(self, suites: list[Suite] | None = None) -> None:
-        self.suites = suites or []
+mock_ecflow.Suite = MockSuite
+mock_ecflow.Family = MockFamily
+mock_ecflow.Task = MockTask
+mock_ecflow.State.active = "active"
+mock_ecflow.State.complete = "complete"
 
-    def find_abs_node(self, path: str) -> Node | None:
-        # Very simple mock implementation
-        if path == "/tutorial":
-            return self.suites[0]
-        if path == "/tutorial/ingest":
-            return self.suites[0].nodes[0]
-        return None
+sys.modules["ecflow"] = mock_ecflow
 
+# We need to set PYTHONPATH to find src BEFORE importing ectop
+sys.path.insert(0, os.path.abspath("src"))
 
-mock_ecflow.Node = Node
-mock_ecflow.Task = Task
-mock_ecflow.Family = Family
-mock_ecflow.Suite = Suite
-mock_ecflow.Defs = Defs
-
+# Mock the client
 from ectop.app import Ectop  # noqa: E402
 
 
-async def capture_screenshot():
-    app = Ectop()
-
-    # Mock the ecflow client
+async def capture_screenshots():
+    # Setup mock client
     mock_client = MagicMock()
-    app.ecflow_client = mock_client
+    mock_defs = MagicMock()
 
-    # Create a mock Defs
-    s1 = Suite("tutorial")
-    f1 = Family("ingest", parent=s1)
-    t1 = Task("get_data", parent=f1)
-    t2 = Task("process_data", parent=f1)
-    f1.nodes = [t1, t2]
-    s1.nodes = [f1]
-    defs = Defs([s1])
+    suite = MockSuite("ectop_demo")
+    family = MockFamily("operational", suite)
+    task1 = MockTask("process_1", family)
+    task2 = MockTask("process_2", family)
+    family.nodes = [task1, task2]
+    suite.nodes = [family]
 
-    # Mock sync_local and get_defs
-    mock_client.get_defs.return_value = defs
-    mock_client.host = "localhost"
-    mock_client.port = 3141
+    mock_defs.suites = [suite]
+    mock_defs.get_all_nodes.return_value = suite.get_all_nodes() + [suite]
+    mock_defs.find_abs_node.side_effect = lambda p: task1 if "process_1" in p else (family if "operational" in p else suite)
 
-    async with app.run_test(size=(100, 30)):
-        await asyncio.sleep(0.1)
-        # Manually trigger tree update since initial_connect might have failed/not run
-        tree = app.query_one("#suite_tree")
-        tree.update_tree("localhost", 3141, defs)
-        tree.root.expand()
-        tree.root.children[0].expand()  # tutorial
-        tree.root.children[0].children[0].expand()  # ingest
-        await asyncio.sleep(0.1)
+    mock_client.get_defs_sync.return_value = mock_defs
 
-        # Take screenshot
-        app.save_screenshot("docs/assets/main_view.svg")
-        print("Screenshot saved to docs/assets/main_view.svg")
+    # Initialize app
+    app = Ectop()
+    app.client = mock_client
+
+    # Capture main view
+    async with app.run_test(size=(120, 40)) as pilot:
+        # Load the mock defs into the tree
+        from ectop.widgets.sidebar import SuiteTree
+
+        tree = app.query_one(SuiteTree)
+        tree.update_tree("localhost", 3141, mock_defs)
+
+        await pilot.pause(1.0)
+        # Expand the tree to show something
+        await pilot.press("enter")  # Expand suite
+        await pilot.pause(0.5)
+        await pilot.press("down", "enter")  # Expand family
+        await pilot.pause(0.5)
+
+        try:
+            svg = app.export_screenshot()
+            with open("docs/assets/main_view.svg", "w") as f:
+                f.write(svg)
+            print("Captured main_view.svg")
+        except Exception as e:
+            print(f"Failed main_view: {e}")
+
+        # Open Why Inspector
+        try:
+            from ectop.widgets.modals.why import WhyInspector
+
+            screen = WhyInspector("/ectop_demo/operational/process_1", mock_client)
+            app.push_screen(screen)
+            await pilot.pause(1.0)
+            svg = app.export_screenshot()
+            with open("docs/assets/why_inspector.svg", "w") as f:
+                f.write(svg)
+            print("Captured why_inspector.svg")
+            app.pop_screen()
+        except Exception as e:
+            print(f"Failed why_inspector: {e}")
+
+        # Open Variable Tweaker
+        try:
+            from ectop.widgets.modals.variables import VariableTweaker
+
+            screen = VariableTweaker("/ectop_demo/operational/process_1", mock_client)
+            app.push_screen(screen)
+            await pilot.pause(1.0)
+            svg = app.export_screenshot()
+            with open("docs/assets/variable_tweaker.svg", "w") as f:
+                f.write(svg)
+            print("Captured variable_tweaker.svg")
+            app.pop_screen()
+        except Exception as e:
+            print(f"Failed variable_tweaker: {e}")
 
 
 if __name__ == "__main__":
-    asyncio.run(capture_screenshot())
+    os.makedirs("docs/assets", exist_ok=True)
+    try:
+        asyncio.run(capture_screenshots())
+    except Exception as e:
+        print(f"Error: {e}")

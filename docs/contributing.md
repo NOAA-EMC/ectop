@@ -1,3 +1,8 @@
+# #############################################################################
+# WARNING: If you modify features, API, or usage, you MUST update the
+# documentation immediately.
+# #############################################################################
+
 # Contributing to ectop
 
 Thank you for your interest in improving `ectop`!
@@ -23,7 +28,7 @@ pip install -e .[dev]
 
 - **Python Version**: Required 3.11+.
 - **Type Hints**: All function signatures must include type hints.
-- **Documentation**: We use **NumPy-style** docstrings.
+- **Documentation**: We use **Google-style** docstrings.
 - **Formatting**: We use `ruff` for linting and formatting.
 
 ### Pre-commit Hooks

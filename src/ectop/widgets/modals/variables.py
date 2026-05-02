@@ -25,6 +25,7 @@ from ectop.constants import (
     VAR_TYPE_INHERITED,
     VAR_TYPE_USER,
 )
+from ectop.utils import safe_call_app
 
 
 class VariableTweaker(ModalScreen[None]):
@@ -95,17 +96,17 @@ class VariableTweaker(ModalScreen[None]):
         if event.button.id == "close_btn":
             self.app.pop_screen()
 
-    @work
-    async def refresh_vars(self) -> None:
+    @work(thread=True)
+    def refresh_vars(self) -> None:
         """
         Fetch variables from the server and refresh the table in a background worker.
 
         Notes:
-            This is an async background worker.
+            This is a background thread worker.
         """
-        await self._refresh_vars_logic()
+        self._refresh_vars_logic()
 
-    async def _refresh_vars_logic(self) -> None:
+    def _refresh_vars_logic(self) -> None:
         """
         The actual logic for fetching variables and updating the UI.
 
@@ -113,17 +114,17 @@ class VariableTweaker(ModalScreen[None]):
             RuntimeError: If server synchronization fails.
 
         Notes:
-            This method can be called directly for testing.
+            This method is called from a background worker.
         """
         try:
-            await self.client.sync_local()
-            defs = await self.client.get_defs()
+            self.client.sync_local_sync()
+            defs = self.client.get_defs_sync()
             if not defs:
                 return
             node = defs.find_abs_node(self.node_path)
 
             if not node:
-                self.app.notify("Node not found", severity="error")
+                safe_call_app(self.app, self.app.notify, "Node not found", severity="error")
                 return
 
             rows: list[tuple[str, str, str, str]] = []
@@ -156,12 +157,12 @@ class VariableTweaker(ModalScreen[None]):
                         seen_vars.add(var.name())
                 parent = parent.get_parent()
 
-            self._update_table(rows)
+            safe_call_app(self.app, self._update_table, rows)
 
         except RuntimeError as e:
-            self.app.notify(f"Error fetching variables: {e}", severity="error")
+            safe_call_app(self.app, self.app.notify, f"Error fetching variables: {e}", severity="error")
         except Exception as e:
-            self.app.notify(f"Unexpected Error: {e}", severity="error")
+            safe_call_app(self.app, self.app.notify, f"Unexpected Error: {e}", severity="error")
 
     def _update_table(self, rows: list[tuple[str, str, str, str]]) -> None:
         """
@@ -202,8 +203,8 @@ class VariableTweaker(ModalScreen[None]):
         if event.input.id == "var_input":
             self._submit_variable_worker(event.value)
 
-    @work
-    async def _submit_variable_worker(self, value: str) -> None:
+    @work(thread=True)
+    def _submit_variable_worker(self, value: str) -> None:
         """
         Worker to submit a new or updated variable in a background thread.
 
@@ -211,11 +212,11 @@ class VariableTweaker(ModalScreen[None]):
             value: The new value or 'name=value' string.
 
         Notes:
-            This is an async background worker.
+            This is a background thread worker.
         """
-        await self._submit_variable_logic(value)
+        self._submit_variable_logic(value)
 
-    async def _submit_variable_logic(self, value: str) -> None:
+    def _submit_variable_logic(self, value: str) -> None:
         """
         The actual logic for submitting a variable update or addition.
 
@@ -226,29 +227,29 @@ class VariableTweaker(ModalScreen[None]):
             RuntimeError: If the server alteration fails.
 
         Notes:
-            This method can be called directly for testing.
+            This method is called from a background worker.
         """
         try:
             if self.selected_var_name:
                 # Editing existing
-                await self.client.alter(self.node_path, "add", "variable", self.selected_var_name, value)
-                self.app.notify(f"Updated {self.selected_var_name}")
+                self.client.alter_sync(self.node_path, "add", "variable", self.selected_var_name, value)
+                safe_call_app(self.app, self.app.notify, f"Updated {self.selected_var_name}")
             else:
                 # Adding new (expecting name=value)
                 if "=" in value:
                     name, val = value.split("=", 1)
-                    await self.client.alter(self.node_path, "add", "variable", name.strip(), val.strip())
-                    self.app.notify(f"Added {name.strip()}")
+                    self.client.alter_sync(self.node_path, "add", "variable", name.strip(), val.strip())
+                    safe_call_app(self.app, self.app.notify, f"Added {name.strip()}")
                 else:
-                    self.app.notify("Use name=value format to add", severity="warning")
+                    safe_call_app(self.app, self.app.notify, "Use name=value format to add", severity="warning")
                     return
 
-            self._reset_input()
-            await self.refresh_vars()
+            safe_call_app(self.app, self._reset_input)
+            self.refresh_vars()
         except RuntimeError as e:
-            self.app.notify(f"Error: {e}", severity="error")
+            safe_call_app(self.app, self.app.notify, f"Error: {e}", severity="error")
         except Exception as e:
-            self.app.notify(f"Unexpected Error: {e}", severity="error")
+            safe_call_app(self.app, self.app.notify, f"Unexpected Error: {e}", severity="error")
 
     def _reset_input(self) -> None:
         """
@@ -283,8 +284,8 @@ class VariableTweaker(ModalScreen[None]):
             if row_key:
                 self._delete_variable_worker(row_key)
 
-    @work
-    async def _delete_variable_worker(self, row_key: str) -> None:
+    @work(thread=True)
+    def _delete_variable_worker(self, row_key: str) -> None:
         """
         Worker to delete a variable from the server in a background thread.
 
@@ -292,11 +293,11 @@ class VariableTweaker(ModalScreen[None]):
             row_key: The name (or key) of the variable to delete.
 
         Notes:
-            This is an async background worker.
+            This is a background thread worker.
         """
-        await self._delete_variable_logic(row_key)
+        self._delete_variable_logic(row_key)
 
-    async def _delete_variable_logic(self, row_key: str) -> None:
+    def _delete_variable_logic(self, row_key: str) -> None:
         """
         The actual logic for deleting a variable.
 
@@ -307,17 +308,17 @@ class VariableTweaker(ModalScreen[None]):
             RuntimeError: If the server alteration fails.
 
         Notes:
-            This method can be called directly for testing.
+            This method is called from a background worker.
         """
         if row_key.startswith(INHERITED_VAR_PREFIX):
-            self.app.notify("Cannot delete inherited variables", severity="error")
+            safe_call_app(self.app, self.app.notify, "Cannot delete inherited variables", severity="error")
             return
 
         try:
-            await self.client.alter(self.node_path, "delete", "variable", row_key)
-            self.app.notify(f"Deleted {row_key}")
-            await self.refresh_vars()
+            self.client.alter_sync(self.node_path, "delete", "variable", row_key)
+            safe_call_app(self.app, self.app.notify, f"Deleted {row_key}")
+            self.refresh_vars()
         except RuntimeError as e:
-            self.app.notify(f"Error: {e}", severity="error")
+            safe_call_app(self.app, self.app.notify, f"Error: {e}", severity="error")
         except Exception as e:
-            self.app.notify(f"Unexpected Error: {e}", severity="error")
+            safe_call_app(self.app, self.app.notify, f"Unexpected Error: {e}", severity="error")

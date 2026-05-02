@@ -62,6 +62,8 @@ async def test_app_action_copy_path():
 async def test_why_inspector_error_handling():
     """Test error handling logic in WhyInspector._refresh_deps_logic."""
     mock_client = MagicMock()
+    # Mock sync_local_sync since WhyInspector now uses it (integration hardening from main)
+    mock_client.sync_local_sync = MagicMock()
     inspector = WhyInspector("/node", mock_client)
 
     with patch.object(WhyInspector, "app", new_callable=PropertyMock) as mock_app:
@@ -73,12 +75,15 @@ async def test_why_inspector_error_handling():
         tree = MagicMock()
         tree.root = MagicMock()
 
+        # Mock query_one to return the mocked tree
+        inspector.query_one = MagicMock(return_value=tree)
+
         # Test RuntimeError
-        mock_client.sync_local.side_effect = RuntimeError("Sync failed")
-        await inspector._refresh_deps_logic(tree)
+        mock_client.sync_local_sync.side_effect = RuntimeError("Sync failed")
+        inspector._refresh_deps_logic()
         assert "Error: Sync failed" in str(tree.root.label)
 
         # Test generic Exception
-        mock_client.sync_local.side_effect = Exception("Unexpected")
-        await inspector._refresh_deps_logic(tree)
+        mock_client.sync_local_sync.side_effect = Exception("Unexpected")
+        inspector._refresh_deps_logic()
         assert "Unexpected Error: Unexpected" in str(tree.root.label)
