@@ -61,6 +61,7 @@ Once `ectop` is running, you can use the following keys to interact with the app
 | `v` | **Variables** | Opens the Variable Tweaker to view, edit, or add node variables. |
 | `e` | **Edit Script** | Opens the task script in your `$EDITOR`. Saving and exiting will update it on the server. |
 | `t` | **Toggle Live Log** | Toggles periodic updates for the currently viewed output log. |
+| `Z` (Shift+Z) | **Zombies** | Opens the Zombie Management Dashboard to view and resolve orphaned jobs. |
 | `Ctrl+F` | **Search Content** | Allows searching for specific text within the currently displayed log or script. |
 
 ### Tree Filtering
@@ -68,6 +69,7 @@ Once `ectop` is running, you can use the following keys to interact with the app
 | Key | Action | Description |
 |-----|--------|-------------|
 | `F` (Shift+F) | **Cycle Filter** | Cycles through status filters: `All`, `Aborted`, `Active`, `Queued`, `Submitted`, `Suspended`. |
+| `H` (Shift+H) | **Focus Mode** | Toggles hiding of nodes with a `complete` state to declutter the tree. |
 
 ### Server Control
 

@@ -86,11 +86,19 @@ In large deployments, finding a node can be difficult.
 3. The tree will filter in real-time. Press **Enter** to select the match and clear the search.
 
 ### 🎭 Filtering by Status
-Focus on what matters by filtering the tree. Press `Shift + F` to cycle through status filters:
-- **Aborted**: Only show failed tasks.
-- **Active**: Only show what is currently running.
-- **Suspended**: Find all paused work.
-- **All**: Clear all filters.
+Focus on what matters by filtering the tree.
+- **Cycle Filter (`Shift + F`)**: Cycle through status filters like `Aborted`, `Active`, or `Suspended`.
+- **Focus Mode (`Shift + H`)**: A quick toggle to hide all `complete` nodes from the tree, allowing you to focus on work that is still in progress.
+
+### 🧟 Zombie Management
+Orphaned tasks (zombies) can sometimes clog your scheduler. Press `Shift + Z` to open the **Zombie Dashboard**.
+- View all zombies across the server with their process IDs and creation times.
+- Select a zombie and use `f` to **Fob**, `F` to **Fail**, or `a` to **Adopt** it.
+
+### 📊 Performance Timeline
+To identify bottlenecks in your workflow, check the **Timeline** tab in the main content area (available after pressing `l` on a family or task).
+- Visualizes the relative state-change times of sibling tasks.
+- Helps identify which tasks in a family are taking the longest to start or finish.
 
 ### 📝 Managing Variables
 Select any node and press `v` to open the **Variable Tweaker**.
