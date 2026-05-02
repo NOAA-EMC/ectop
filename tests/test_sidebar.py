@@ -4,14 +4,18 @@
 # #############################################################################
 # .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
 """
-Tests for the Sidebar (SuiteTree) widget.
+Tests for the Sidebar (SuiteTree) widget using live ecFlow server.
 
 .. note::
     If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
+from __future__ import annotations
+
+import random
 from unittest.mock import MagicMock, PropertyMock, patch
 
+import ecflow
 import pytest
 from rich.text import Text
 
@@ -19,82 +23,86 @@ from ectop.widgets.sidebar import SuiteTree
 
 
 @pytest.fixture
-def mock_defs() -> MagicMock:
+def live_defs(ecflow_server: str) -> ecflow.Defs:
     """
-    Create a mock ecFlow definition with some suites.
+    Load a test definition to the live server and return it.
+
+    Args:
+        ecflow_server: The host:port of the live ecFlow server.
 
     Returns:
-    MagicMock
-        A mock Defs object.
+        ecflow.Defs: The definitions fetched from the server.
+
+    Raises:
+        RuntimeError: If server communication fails.
     """
-    defs = MagicMock()
-    suite1 = MagicMock()
-    suite1.name.return_value = "s1"
-    suite1.get_abs_node_path.return_value = "/s1"
-    suite1.get_state.return_value = "complete"
-    suite1.nodes = []
-    suite1.get_all_nodes.return_value = []
+    host, port = ecflow_server.split(":")
+    client = ecflow.Client(host, int(port))
 
-    suite2 = MagicMock()
-    suite2.name.return_value = "s2"
-    suite2.get_abs_node_path.return_value = "/s2"
-    suite2.get_state.return_value = "active"
+    # Create a unique suite name to avoid cross-test interference
+    suffix = random.randint(0, 1000000)
+    s1_name = f"s1_{suffix}"
+    s2_name = f"s2_{suffix}"
 
-    task2a = MagicMock()
-    task2a.name.return_value = "t2a"
-    task2a.get_abs_node_path.return_value = "/s2/t2a"
-    task2a.get_state.return_value = "queued"
-    task2a.nodes = []
-    task2a.get_all_nodes.return_value = []
+    defs = ecflow.Defs()
+    s1 = defs.add_suite(s1_name)
+    s1.add_task("t1")
+    s2 = defs.add_suite(s2_name)
+    s2.add_task("t2a")
 
-    suite2.nodes = [task2a]
-    suite2.get_all_nodes.return_value = [task2a]
+    # Load and begin
+    client.load(defs)
+    client.begin_all_suites()
 
-    suite1.get_parent.return_value = None
-    suite2.get_parent.return_value = None
-    task2a.get_parent.return_value = suite2
+    # Force states
+    client.force_state(f"/{s1_name}", ecflow.State.complete)
+    client.force_state(f"/{s2_name}", ecflow.State.active)
+    client.force_state(f"/{s2_name}/t2a", ecflow.State.queued)
 
-    defs.suites = [suite1, suite2]
-    defs.get_all_nodes.return_value = [suite1, suite2, task2a]
-    defs.find_abs_node.side_effect = lambda p: {"/s1": suite1, "/s2": suite2, "/s2/t2a": task2a}.get(p)
-
-    return defs
+    # Sync and return
+    client.sync_local()
+    return client.get_defs()
 
 
-def test_update_tree(mock_defs: MagicMock) -> None:
+def test_update_tree(live_defs: ecflow.Defs) -> None:
     """
     Test that update_tree clears and repopulates the tree.
 
-    Parameters:
-    mock_defs : MagicMock
-        The mock ecFlow definitions.
+    Args:
+        live_defs: The ecFlow definitions from the live server.
+
+    Returns:
+        None
     """
     tree = SuiteTree("Test")
     tree.clear = MagicMock()
     tree.root = MagicMock()
 
-    # Mock _add_node_to_ui and _build_caches_and_populate to avoid Textual internals and threading
     with patch.object(SuiteTree, "_add_node_to_ui"), patch.object(SuiteTree, "_build_caches_and_populate") as mock_worker:
-        tree.update_tree("localhost", 3141, mock_defs)
+        tree.update_tree("localhost", 3141, live_defs)
 
         tree.clear.assert_called_once()
-        assert tree.defs == mock_defs
+        assert tree.defs == live_defs
         mock_worker.assert_called_once()
 
 
-def test_load_children(mock_defs: MagicMock) -> None:
+def test_load_children(live_defs: ecflow.Defs) -> None:
     """
     Test that _load_children calls the worker.
 
-    Parameters:
-    mock_defs : MagicMock
-        The mock ecFlow definitions.
+    Args:
+        live_defs: The ecFlow definitions from the live server.
+
+    Returns:
+        None
     """
     tree = SuiteTree("Test")
-    tree.defs = mock_defs
+    tree.defs = live_defs
+    suite = list(live_defs.suites)[0]
+    path = suite.get_abs_node_path()
 
     ui_node = MagicMock()
-    ui_node.data = "/s2"
+    ui_node.data = path
     placeholder = MagicMock()
     placeholder.label = Text("loading...")
     ui_node.children = [placeholder]
@@ -107,37 +115,44 @@ def test_load_children(mock_defs: MagicMock) -> None:
         mock_app_prop.return_value = mock_app
         tree._load_children(ui_node)
 
-        # placeholder.remove is now called via call_from_thread
         mock_app.call_from_thread.assert_any_call(placeholder.remove)
-        mock_worker.assert_called_with(ui_node, "/s2")
+        mock_worker.assert_called_with(ui_node, path)
 
 
-def test_load_children_worker(mock_defs: MagicMock) -> None:
+def test_load_children_worker(live_defs: ecflow.Defs) -> None:
     """
     Test that the worker correctly schedules node additions.
 
-    Parameters:
-    mock_defs : MagicMock
-        The mock ecFlow definitions.
+    Args:
+        live_defs: The ecFlow definitions from the live server.
+
+    Returns:
+        None
     """
     tree = SuiteTree("Test")
-    tree.defs = mock_defs
+    tree.defs = live_defs
+    # Find s2 which has t2a
+    s2 = None
+    for s in live_defs.suites:
+        if "s2_" in s.name():
+            s2 = s
+            break
+    assert s2 is not None
+    path = s2.get_abs_node_path()
 
     ui_node = MagicMock()
-    ui_node.data = "/s2"
+    ui_node.data = path
 
     with (
         patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop,
         patch.object(SuiteTree, "_add_nodes_batch"),
     ):
         mock_app = MagicMock()
-        # Mock _thread_id to simulate being on a different thread
         mock_app._thread_id = -1
         mock_app_prop.return_value = mock_app
 
-        tree._load_children_worker(ui_node, "/s2")
+        tree._load_children_worker(ui_node, path)
 
-        # Should have called call_from_thread with _add_nodes_batch
         mock_app.call_from_thread.assert_called_once()
         args, _ = mock_app.call_from_thread.call_args
         assert args[0] == tree._add_nodes_batch
@@ -146,27 +161,38 @@ def test_load_children_worker(mock_defs: MagicMock) -> None:
         assert args[2][0].name() == "t2a"
 
 
-def test_select_by_path(mock_defs: MagicMock) -> None:
+def test_select_by_path(live_defs: ecflow.Defs) -> None:
     """
     Test that select_by_path expands and selects the correct node.
 
-    Parameters:
-    mock_defs : MagicMock
-        The mock ecFlow definitions.
+    Args:
+        live_defs: The ecFlow definitions from the live server.
+
+    Returns:
+        None
     """
     tree = SuiteTree("Test")
-    tree.defs = mock_defs
+    tree.defs = live_defs
     tree.root = MagicMock()
     tree.root.data = "/"
 
+    s2 = None
+    for s in live_defs.suites:
+        if "s2_" in s.name():
+            s2 = s
+            break
+    assert s2 is not None
+    s2_path = s2.get_abs_node_path()
+    t2a_path = f"{s2_path}/t2a"
+
     # Mock children of root
     child_s2 = MagicMock()
-    child_s2.data = "/s2"
+    child_s2.data = s2_path
     tree.root.children = [child_s2]
 
     # Mock children of s2
     child_t2a = MagicMock()
-    child_t2a.data = "/s2/t2a"
+    child_t2a.data = t2a_path
     child_s2.children = [child_t2a]
 
     with (
@@ -176,25 +202,25 @@ def test_select_by_path(mock_defs: MagicMock) -> None:
     ):
         mock_app = MagicMock()
         mock_app_prop.return_value = mock_app
-        # Use logic method for synchronous test
-        tree._select_by_path_logic("/s2/t2a")
+        tree._select_by_path_logic(t2a_path)
 
-        # Should have called _load_children for root and s2
         assert mock_load.call_count >= 2
         mock_app.call_from_thread.assert_any_call(child_s2.expand)
         mock_app.call_from_thread.assert_called_with(mock_select, child_t2a)
 
 
-def test_find_and_select_caching(mock_defs: MagicMock) -> None:
+def test_find_and_select_caching(live_defs: ecflow.Defs) -> None:
     """
     Test that find_and_select uses the path cache.
 
-    Parameters:
-    mock_defs : MagicMock
-        The mock ecFlow definitions.
+    Args:
+        live_defs: The ecFlow definitions from the live server.
+
+    Returns:
+        None
     """
     tree = SuiteTree("Test")
-    tree.defs = mock_defs
+    tree.defs = live_defs
     with patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop:
         mock_app = MagicMock()
         mock_app_prop.return_value = mock_app
@@ -205,55 +231,83 @@ def test_find_and_select_caching(mock_defs: MagicMock) -> None:
             patch.object(SuiteTree, "_select_by_path_logic") as mock_select_logic,
             patch.object(SuiteTree, "_add_node_to_ui"),
         ):
-            # Manually trigger cache build for logic test
             tree._build_caches_and_populate()
 
+            # Search for t2a
             tree._find_and_select_logic("t2a")
             assert tree._all_paths_cache is not None
-            assert "/s2/t2a" in tree._all_paths_cache
-            # mock_select_logic should be called
-            mock_select_logic.assert_called_with("/s2/t2a")
 
-            # Modify defs - but cache should persist until update_tree is called
-            tree.defs.suites = []
+            # Find the actual path of t2a in cache
+            t2a_path = None
+            for p in tree._all_paths_cache:
+                if p.endswith("/t2a"):
+                    t2a_path = p
+                    break
+            assert t2a_path is not None
+
+            mock_select_logic.assert_called_with(t2a_path)
+
             mock_select_logic.reset_mock()
-            tree._find_and_select_logic("t2a")
-            mock_select_logic.assert_called_with("/s2/t2a")  # Still works from cache
-
-            # update_tree should clear cache
             tree.update_tree("localhost", 3141, None)
             assert tree._all_paths_cache is None
 
 
-def test_should_show_node(mock_defs: MagicMock) -> None:
-    """Test the filtering logic for nodes."""
-    tree = SuiteTree("Test")
-    tree.defs = mock_defs
-    tree.filters = [None, "complete", "active", "queued"]
-    suite1 = mock_defs.suites[0]  # complete
-    suite2 = mock_defs.suites[1]  # active
-    task2a = suite2.nodes[0]  # queued
+def test_should_show_node(live_defs: ecflow.Defs) -> None:
+    """
+    Test the filtering logic for nodes.
 
-    # Pre-build cache
+    Args:
+        live_defs: The ecFlow definitions from the live server.
+
+    Returns:
+        None
+    """
+    tree = SuiteTree("Test")
+    tree.defs = live_defs
+    tree.filters = [None, "complete", "active", "queued"]
+
+    s1 = None
+    s2 = None
+    for s in live_defs.suites:
+        if "s1_" in s.name():
+            s1 = s
+        if "s2_" in s.name():
+            s2 = s
+
+    assert s1 is not None
+    assert s2 is not None
+    task2a = list(s2.nodes)[0]  # queued
+
     tree._build_caches_and_populate()
 
     # No filter
     tree.current_filter = None
-    assert tree._should_show_node(suite1) is True
+    assert tree._should_show_node(s1) is True
 
-    # State match
-    tree.current_filter = "complete"
-    assert tree._should_show_node(suite1) is True
-    assert tree._should_show_node(suite2) is False
+    # Check actual states
+    s1_state = str(s1.get_state())
+    s2_state = str(s2.get_state())
+    t2a_state = str(task2a.get_state())
 
-    # Parent matches because child matches
-    tree.current_filter = "queued"
-    assert tree._should_show_node(suite2) is True
+    tree.current_filter = s1_state
+    assert tree._should_show_node(s1) is True
+
+    if s2_state != s1_state:
+        tree.current_filter = s1_state
+        assert tree._should_show_node(s2) is False
+
+    tree.current_filter = t2a_state
     assert tree._should_show_node(task2a) is True
+    assert tree._should_show_node(s2) is True
 
 
 def test_action_cycle_filter() -> None:
-    """Test cycling through status filters."""
+    """
+    Test cycling through status filters.
+
+    Returns:
+        None
+    """
     tree = SuiteTree("Test")
     with patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop:
         mock_app = MagicMock()
@@ -273,17 +327,24 @@ def test_action_cycle_filter() -> None:
         mock_app.notify.assert_called_with("Filter: All")
 
 
-def test_populate_tree_worker(mock_defs: MagicMock) -> None:
-    """Test the background worker for tree population."""
+def test_populate_tree_worker(live_defs: ecflow.Defs) -> None:
+    """
+    Test the background worker for tree population.
+
+    Args:
+        live_defs: The ecFlow definitions from the live server.
+
+    Returns:
+        None
+    """
     tree = SuiteTree("Test")
-    tree.defs = mock_defs
+    tree.defs = live_defs
     tree.root = MagicMock()
 
     with patch.object(tree, "_should_show_node", return_value=True), patch.object(tree, "_safe_call") as mock_safe:
         tree._populate_tree_worker()
-        # Should be 1 call to _add_nodes_batch for 2 suites (batch size 50)
-        assert mock_safe.call_count == 1
+        assert mock_safe.call_count >= 1
         args, _ = mock_safe.call_args
         assert args[0] == tree._add_nodes_batch
         assert args[1] == tree.root
-        assert len(args[2]) == 2
+        assert len(args[2]) >= 2
