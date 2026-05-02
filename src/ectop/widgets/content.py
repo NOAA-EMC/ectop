@@ -22,6 +22,7 @@ from textual.widgets import Input, RichLog, Static, TabbedContent, TabPane
 
 from ectop.constants import DEFAULT_SHELL, SYNTAX_THEME
 from ectop.utils import safe_call_app
+from ectop.widgets.timeline import TimelineTab
 
 
 class MainContent(Vertical):
@@ -77,6 +78,8 @@ class MainContent(Vertical):
             with TabPane("Job (Processed)", id="tab_job"):
                 with VerticalScroll():
                     yield Static("", id="view_job", classes="code_view")
+            with TabPane("Timeline", id="tab_timeline"):
+                yield TimelineTab(id="view_timeline", classes="code_view")
 
     @property
     def active(self) -> str | None:
@@ -187,6 +190,15 @@ class MainContent(Vertical):
             content: The job content.
         """
         self.job_content = content
+
+    def update_timeline(self, node: Any) -> None:
+        """
+        Update the Timeline tab.
+
+        Args:
+            node: The ecFlow node.
+        """
+        self.query_one("#view_timeline", TimelineTab).update_timeline(node)
 
     def action_search(self) -> None:
         """

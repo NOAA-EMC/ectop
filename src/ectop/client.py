@@ -546,3 +546,100 @@ class EcflowClient:
             This is an async method that runs the blocking call in a separate thread.
         """
         await asyncio.to_thread(self.begin_suite_sync, name)
+
+    def zombie_get_sync(self) -> list[ecflow.Zombie]:
+        """
+        Synchronously retrieve the list of zombies from the server.
+
+        Returns:
+            List of zombie objects.
+
+        Raises:
+            RuntimeError: If retrieval fails.
+        """
+        with self._lock:
+            try:
+                return self.client.zombie_get()
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to get zombies: {e}") from e
+
+    async def zombie_get(self) -> list[ecflow.Zombie]:
+        """
+        Retrieve the list of zombies from the server.
+
+        Returns:
+            List of zombie objects.
+
+        Raises:
+            RuntimeError: If retrieval fails.
+
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+        """
+        return await asyncio.to_thread(self.zombie_get_sync)
+
+    def zombie_fob_sync(self, zombie: ecflow.Zombie) -> None:
+        """
+        Synchronously FOB a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        with self._lock:
+            try:
+                self.client.zombie_fob(zombie)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to FOB zombie: {e}") from e
+
+    async def zombie_fob(self, zombie: ecflow.Zombie) -> None:
+        """
+        FOB a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        await asyncio.to_thread(self.zombie_fob_sync, zombie)
+
+    def zombie_fail_sync(self, zombie: ecflow.Zombie) -> None:
+        """
+        Synchronously fail a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        with self._lock:
+            try:
+                self.client.zombie_fail(zombie)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to fail zombie: {e}") from e
+
+    async def zombie_fail(self, zombie: ecflow.Zombie) -> None:
+        """
+        Fail a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        await asyncio.to_thread(self.zombie_fail_sync, zombie)
+
+    def zombie_adopt_sync(self, zombie: ecflow.Zombie) -> None:
+        """
+        Synchronously adopt a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        with self._lock:
+            try:
+                self.client.zombie_adopt(zombie)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to adopt zombie: {e}") from e
+
+    async def zombie_adopt(self, zombie: ecflow.Zombie) -> None:
+        """
+        Adopt a zombie.
+
+        Args:
+            zombie: The zombie object.
+        """
+        await asyncio.to_thread(self.zombie_adopt_sync, zombie)

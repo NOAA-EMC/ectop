@@ -51,6 +51,9 @@ class SuiteTree(Tree[str]):
     current_filter: reactive[str | None] = reactive(None, init=False)
     """The current status filter applied to the tree."""
 
+    focus_mode: reactive[bool] = reactive(False, init=False)
+    """Whether Focus Mode is active (hides complete nodes)."""
+
     defs: reactive[Defs | None] = reactive(None, init=False)
     """The ecFlow definitions to display."""
 
@@ -105,6 +108,15 @@ class SuiteTree(Tree[str]):
         """
         self._rebuild_tree()
 
+    def watch_focus_mode(self, focus_mode: bool) -> None:
+        """
+        Watch for changes in focus mode and rebuild the tree.
+
+        Args:
+            focus_mode: The new focus mode value.
+        """
+        self._rebuild_tree()
+
     def _rebuild_tree(self) -> None:
         """
         Rebuild the tree from ecFlow definitions using lazy loading.
@@ -133,7 +145,8 @@ class SuiteTree(Tree[str]):
             return
 
         filter_str = f" [Filter: {self.current_filter}]" if self.current_filter else ""
-        self.root.label = f"{ICON_SERVER} {self.host}:{self.port}{filter_str}"
+        focus_str = " [Focus]" if self.focus_mode else ""
+        self.root.label = f"{ICON_SERVER} {self.host}:{self.port}{filter_str}{focus_str}"
 
         # Combine cache building and population triggering
         self._build_caches_and_populate()
@@ -265,6 +278,9 @@ class SuiteTree(Tree[str]):
         Returns:
             True if the node or any of its descendants match the filter.
         """
+        if self.focus_mode and str(node.get_state()) == "complete":
+            return False
+
         if self.current_filter is None:
             return True
 
@@ -289,6 +305,14 @@ class SuiteTree(Tree[str]):
         self.current_filter = self.filters[next_idx]
 
         self.app.notify(f"Filter: {self.current_filter or 'All'}")
+
+    def action_toggle_focus(self) -> None:
+        """
+        Toggle Focus Mode and refresh the tree.
+        """
+        self.focus_mode = not self.focus_mode
+        state = "ON" if self.focus_mode else "OFF"
+        self.app.notify(f"Focus Mode: {state}")
 
     def _add_node_to_ui(self, parent_ui_node: TreeNode[str], ecflow_node: ecflow.Node) -> TreeNode[str]:
         """
