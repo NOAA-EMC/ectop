@@ -157,10 +157,10 @@ async def test_client_server_control(client_instance):
 
 
 @pytest.mark.asyncio
-async def test_client_sync_local_error(client_instance):
-    """Test that sync_local handles RuntimeError from the underlying client."""
-    from unittest.mock import patch
-
-    with patch.object(client_instance.client, "sync_local", side_effect=RuntimeError("Connection lost")):
-        with pytest.raises(RuntimeError, match="Connection lost"):
-            await client_instance.sync_local()
+async def test_client_sync_local_error(ecflow_server):
+    """Test that sync_local handles RuntimeError when server is unreachable."""
+    # Use a client pointing to a port where no server is listening
+    # We can't easily stop the ecflow_server fixture here, but we can just use an invalid port
+    client = EcflowClient("localhost", 1)  # Port 1 is likely closed
+    with pytest.raises(RuntimeError):
+        await client.sync_local()
