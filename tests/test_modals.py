@@ -2,7 +2,7 @@
 # WARNING: If you modify features, API, or usage, you MUST update the
 # documentation immediately.
 # #############################################################################
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -13,12 +13,9 @@ from ectop.widgets.modals.why import WhyInspector
 @pytest.fixture
 def mock_client():
     client = MagicMock()
-    # Mock both async and sync versions for compatibility during refactor
-    client.sync_local = AsyncMock()
+    # Mock synchronous versions which are now used in workers
     client.sync_local_sync = MagicMock()
-    client.get_defs = AsyncMock()
     client.get_defs_sync = MagicMock()
-    client.alter = AsyncMock()
     client.alter_sync = MagicMock()
     return client
 

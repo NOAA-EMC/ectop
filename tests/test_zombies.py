@@ -42,8 +42,9 @@ async def test_zombie_refresh():
     mock_table.cursor_row = None
 
     mock_app = MagicMock()
-    with patch.object(dashboard, "query_one", return_value=mock_table), patch.object(
-        ZombieDashboard, "app", return_value=mock_app, new_callable=PropertyMock
+    with (
+        patch.object(dashboard, "query_one", return_value=mock_table),
+        patch.object(ZombieDashboard, "app", return_value=mock_app, new_callable=PropertyMock),
     ):
         await dashboard.action_refresh()
 

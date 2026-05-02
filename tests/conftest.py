@@ -29,16 +29,22 @@ def mock_work(*args, **kwargs):
             if asyncio.iscoroutine(result):
                 # Run the coroutine in the current loop
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # We are already in a loop (pytest-asyncio)
-                        # We can't use run_until_complete here.
-                        # We return the task and let the test await it if needed,
-                        # but most tests don't.
-                        return asyncio.create_task(result)
-                    else:
-                        return loop.run_until_complete(result)
+                    loop = asyncio.get_running_loop()
+                    # We are already in a loop (pytest-asyncio)
+                    # We return the task and let the test await it if needed
+                    task = loop.create_task(result)
+
+                    # We also add a callback to catch exceptions
+                    def _done_callback(t):
+                        try:
+                            t.result()
+                        except Exception:
+                            pass
+
+                    task.add_done_callback(_done_callback)
+                    return task
                 except RuntimeError:
+                    # No loop running, use asyncio.run
                     return asyncio.run(result)
             return result
 
