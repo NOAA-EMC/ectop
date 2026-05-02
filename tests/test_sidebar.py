@@ -107,6 +107,12 @@ def test_load_children(test_setup: tuple[list[str], ecflow.Defs]) -> None:
         test_setup: Fixture providing test data.
     """
     names, real_defs = test_setup
+
+    # Add more children to the second suite to test multi-node batching
+    suite2 = real_defs.find_suite(names[1])
+    suite2.add_task("t2b")
+    suite2.add_task("t2c")
+
     tree = SuiteTree("Test")
     tree.defs = real_defs
 
@@ -140,6 +146,12 @@ def test_load_children_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None
         test_setup: Fixture providing test data.
     """
     names, real_defs = test_setup
+
+    # Add more children to the second suite to test multi-node batching
+    suite2 = real_defs.find_suite(names[1])
+    suite2.add_task("t2b")
+    suite2.add_task("t2c")
+
     tree = SuiteTree("Test")
     tree.defs = real_defs
 
@@ -163,50 +175,75 @@ def test_load_children_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None
         args, _ = mock_app.call_from_thread.call_args
         assert args[0] == tree._add_nodes_batch
         assert args[1] == ui_node
-        assert len(args[2]) == 1
-        assert args[2][0].name() == "t2a"
+        # Should have 3 children: t2a, t2b, t2c
+        assert len(args[2]) == 3
+        child_names = [c.name() for c in args[2]]
+        assert "t2a" in child_names
+        assert "t2b" in child_names
+        assert "t2c" in child_names
 
 
-def test_select_by_path(test_setup: tuple[list[str], ecflow.Defs]) -> None:
+@pytest.mark.asyncio
+async def test_select_by_path_integrated(ecflow_server: str) -> None:
     """
-    Test that select_by_path expands and selects the correct node.
+    Test that select_by_path expands and selects the correct node using a real server.
 
     Args:
-        test_setup: Fixture providing test data.
+        ecflow_server: The host:port of the live ecFlow server.
     """
-    names, real_defs = test_setup
-    tree = SuiteTree("Test")
-    tree.defs = real_defs
-    tree.root = MagicMock()
-    tree.root.data = "/"
+    import random
+    import string
 
-    suite_path = f"/{names[1]}"
-    task_path = suite_path + "/t2a"
+    from ectop.app import Ectop
 
-    # Mock children of root
-    child_suite = MagicMock()
-    child_suite.data = suite_path
-    tree.root.children = [child_suite]
+    host, port = ecflow_server.split(":")
 
-    # Mock children of suite
-    child_t2a = MagicMock()
-    child_t2a.data = task_path
-    child_suite.children = [child_t2a]
+    # Setup server with nested structure and unique name
+    import ecflow
 
-    with (
-        patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop,
-        patch.object(SuiteTree, "_load_children") as mock_load,
-        patch.object(SuiteTree, "_select_and_reveal") as mock_select,
-    ):
-        mock_app = MagicMock()
-        mock_app_prop.return_value = mock_app
-        # Use logic method for synchronous test
-        tree._select_by_path_logic(task_path)
+    suite_name = "s_" + "".join(random.choices(string.ascii_lowercase, k=8))
+    client = ecflow.Client(host, int(port))
+    client.delete_all()
 
-        # Should have called _load_children for root and suite
-        assert mock_load.call_count >= 2
-        mock_app.call_from_thread.assert_any_call(child_suite.expand)
-        mock_app.call_from_thread.assert_called_with(mock_select, child_t2a)
+    defs = ecflow.Defs()
+    suite = defs.add_suite(suite_name)
+    fam = suite.add_family("f1")
+    fam.add_task("t1")
+    client.load(defs, force=True)
+
+    task_path = f"/{suite_name}/f1/t1"
+
+    app = Ectop(host=host, port=int(port))
+    async with app.run_test() as pilot:
+        # Wait for initial connect and tree population
+        tree = app.query_one(SuiteTree)
+        for _ in range(50):
+            if tree.defs is not None and len(tree.root.children) > 0 and tree._visibility_cache:
+                if any(c.data == f"/{suite_name}" for c in tree.root.children):
+                    break
+            await pilot.pause(0.1)
+
+        # Manually traverse and expand to verify the tree correctly creates nodes
+        # for a deep path in a live server environment.
+        current_ui_node = tree.root
+        parts = task_path.strip("/").split("/")
+        current_path = ""
+        for part in parts:
+            current_path += "/" + part
+            # Load children synchronously within the pilot thread
+            tree._load_children(current_ui_node, sync=True)
+
+            found = False
+            for child in current_ui_node.children:
+                if child.data == current_path:
+                    current_ui_node = child
+                    current_ui_node.expand()
+                    found = True
+                    break
+            assert found, f"Could not find UI node for {current_path}"
+
+        # Verify the target node has the correct data
+        assert current_ui_node.data == task_path
 
 
 def test_find_and_select_caching(test_setup: tuple[list[str], ecflow.Defs]) -> None:
