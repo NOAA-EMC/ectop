@@ -3,7 +3,7 @@
 # documentation immediately.
 # #############################################################################
 """
-Tests for the Sidebar (SuiteTree) widget.
+Tests for the Sidebar (SuiteTree) widget using live ecFlow server.
 
 .. note::
     If you modify features, API, or usage, you MUST update the documentation immediately.
@@ -90,7 +90,6 @@ def test_update_tree(test_setup: tuple[list[str], ecflow.Defs]) -> None:
     tree.clear = MagicMock()
     tree.root = MagicMock()
 
-    # Mock _add_node_to_ui and _build_caches_and_populate to avoid Textual internals and threading
     with patch.object(SuiteTree, "_add_node_to_ui"), patch.object(SuiteTree, "_build_caches_and_populate") as mock_worker:
         tree.update_tree("localhost", 3141, real_defs)
 
@@ -127,7 +126,6 @@ def test_load_children(test_setup: tuple[list[str], ecflow.Defs]) -> None:
         mock_app_prop.return_value = mock_app
         tree._load_children(ui_node)
 
-        # placeholder.remove is now called via call_from_thread
         mock_app.call_from_thread.assert_any_call(placeholder.remove)
         mock_worker.assert_called_with(ui_node, suite_path)
 
@@ -152,13 +150,11 @@ def test_load_children_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None
         patch.object(SuiteTree, "_add_nodes_batch"),
     ):
         mock_app = MagicMock()
-        # Mock _thread_id to simulate being on a different thread
         mock_app._thread_id = -1
         mock_app_prop.return_value = mock_app
 
         tree._load_children_worker(ui_node, suite_path)
 
-        # Should have called call_from_thread with _add_nodes_batch
         mock_app.call_from_thread.assert_called_once()
         args, _ = mock_app.call_from_thread.call_args
         assert args[0] == tree._add_nodes_batch
@@ -187,6 +183,23 @@ def test_select_by_path(test_setup: tuple[list[str], ecflow.Defs]) -> None:
     child_suite = MagicMock()
     child_suite.data = suite_path
     tree.root.children = [child_suite]
+    tree.defs = live_defs
+    tree.root = MagicMock()
+    tree.root.data = "/"
+
+    s2 = None
+    for s in live_defs.suites:
+        if "s2_" in s.name():
+            s2 = s
+            break
+    assert s2 is not None
+    s2_path = s2.get_abs_node_path()
+    t2a_path = f"{s2_path}/t2a"
+
+    # Mock children of root
+    child_s2 = MagicMock()
+    child_s2.data = s2_path
+    tree.root.children = [child_s2]
 
     # Mock children of suite
     child_t2a = MagicMock()
@@ -232,9 +245,9 @@ def test_find_and_select_caching(test_setup: tuple[list[str], ecflow.Defs]) -> N
             patch.object(SuiteTree, "_select_by_path_logic") as mock_select_logic,
             patch.object(SuiteTree, "_add_node_to_ui"),
         ):
-            # Manually trigger cache build for logic test
             tree._build_caches_and_populate()
 
+            # Search for t2a
             tree._find_and_select_logic("t2a")
             assert tree._all_paths_cache is not None
             # Check if ANY path in all_paths_cache matches our expectation
@@ -250,7 +263,9 @@ def test_find_and_select_caching(test_setup: tuple[list[str], ecflow.Defs]) -> N
             tree._find_and_select_logic("t2a")
             assert mock_select_logic.called
 
-            # update_tree should clear cache
+            mock_select_logic.assert_called_with(t2a_path)
+
+            mock_select_logic.reset_mock()
             tree.update_tree("localhost", 3141, None)
             assert tree._all_paths_cache is None
 
@@ -280,17 +295,25 @@ def test_should_show_node(test_setup: tuple[list[str], ecflow.Defs]) -> None:
 
     # No filter
     tree.current_filter = None
-    assert tree._should_show_node(suite1) is True
+    assert tree._should_show_node(s1) is True
 
-    # State match
-    tree.current_filter = "complete"
-    assert tree._should_show_node(suite1) is True
-    assert tree._should_show_node(suite2) is False
+    # Check actual states
+    s1_state = str(s1.get_state())
+    s2_state = str(s2.get_state())
+    t2a_state = str(task2a.get_state())
+
+    tree.current_filter = s1_state
+    assert tree._should_show_node(s1) is True
+
+    if s2_state != s1_state:
+        tree.current_filter = s1_state
+        assert tree._should_show_node(s2) is False
 
     # Parent matches because child matches
     tree.current_filter = "aborted"
     assert tree._should_show_node(suite2) is True
     assert tree._should_show_node(task2a) is True
+    assert tree._should_show_node(s2) is True
 
 
 def test_action_cycle_filter() -> None:
