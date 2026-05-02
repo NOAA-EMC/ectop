@@ -39,6 +39,11 @@ async def test_client_get_defs(client_instance):
     defs = await client_instance.get_defs()
     assert isinstance(defs, ecflow.Defs)
 
+    # Test get_defs when server has no definitions
+    # (assuming ecflow_server fixture might already have some, but we can check an empty one)
+    # Actually, we can just ensure it doesn't return None
+    assert defs is not None
+
 
 @pytest.mark.asyncio
 async def test_client_load_defs_success(client_instance, tmp_path):
@@ -98,6 +103,7 @@ async def test_client_alter_success(client_instance, tmp_path):
 @pytest.mark.asyncio
 async def test_client_requeue_success(client_instance, tmp_path):
     # Use a unique suite name to avoid interference
+    import asyncio
     import random
 
     suite_name = f"test_requeue_{random.randint(0, 10000)}"
@@ -108,13 +114,23 @@ async def test_client_requeue_success(client_instance, tmp_path):
 
     path = f"/{suite_name}/t1"
     await client_instance.force_complete(path)
-    await client_instance.requeue(path)
     await client_instance.sync_local()
     defs = await client_instance.get_defs()
+    assert str(defs.find_abs_node(path).get_state()) == "complete"
+
+    await client_instance.requeue(path)
+
+    # Harden with retry loop to account for async state update
+    state = "unknown"
+    for _ in range(5):
+        await client_instance.sync_local()
+        defs = await client_instance.get_defs()
+        state = str(defs.find_abs_node(path).get_state())
+        if state != "complete":
+            break
+        await asyncio.sleep(0.1)
+
     # It might be 'queued' or 'active' depending on how fast the server processes it.
-    # In some test environments, it might even abort immediately if the command fails,
-    # but here we just want to verify the client-server roundtrip.
-    state = str(defs.find_abs_node(path).get_state())
     assert state in ("queued", "active", "submitted", "aborted")
 
 
@@ -138,3 +154,13 @@ async def test_client_server_control(client_instance):
     await client_instance.sync_local()
     defs = await client_instance.get_defs()
     assert str(defs.get_server_state()) == "RUNNING"
+
+
+@pytest.mark.asyncio
+async def test_client_sync_local_error(client_instance):
+    """Test that sync_local handles RuntimeError from the underlying client."""
+    from unittest.mock import patch
+
+    with patch.object(client_instance.client, "sync_local", side_effect=RuntimeError("Connection lost")):
+        with pytest.raises(RuntimeError, match="Connection lost"):
+            await client_instance.sync_local()

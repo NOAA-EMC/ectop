@@ -107,6 +107,12 @@ def test_load_children(test_setup: tuple[list[str], ecflow.Defs]) -> None:
         test_setup: Fixture providing test data.
     """
     names, real_defs = test_setup
+
+    # Add more children to the second suite to test multi-node batching
+    suite2 = real_defs.find_suite(names[1])
+    suite2.add_task("t2b")
+    suite2.add_task("t2c")
+
     tree = SuiteTree("Test")
     tree.defs = real_defs
 
@@ -132,18 +138,20 @@ def test_load_children(test_setup: tuple[list[str], ecflow.Defs]) -> None:
         mock_worker.assert_called_with(ui_node, suite_path)
 
 
-def test_load_children_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None:
+def test_load_children_worker() -> None:
     """
     Test that the worker correctly schedules node additions.
-
-    Args:
-        test_setup: Fixture providing test data.
     """
-    names, real_defs = test_setup
+    real_defs = ecflow.Defs()
+    suite = real_defs.add_suite("s2")
+    suite.add_task("t2a")
+    suite.add_task("t2b")
+    suite.add_task("t2c")
+
     tree = SuiteTree("Test")
     tree.defs = real_defs
 
-    suite_path = f"/{names[1]}"
+    suite_path = "/s2"
     ui_node = MagicMock()
     ui_node.data = suite_path
 
@@ -163,13 +171,18 @@ def test_load_children_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None
         args, _ = mock_app.call_from_thread.call_args
         assert args[0] == tree._add_nodes_batch
         assert args[1] == ui_node
-        assert len(args[2]) == 1
-        assert args[2][0].name() == "t2a"
+        # Should have 3 children: t2a, t2b, t2c
+        assert len(args[2]) == 3
+        child_names = [c.name() for c in args[2]]
+        assert "t2a" in child_names
+        assert "t2b" in child_names
+        assert "t2c" in child_names
 
 
 def test_select_by_path(test_setup: tuple[list[str], ecflow.Defs]) -> None:
     """
     Test that select_by_path expands and selects the correct node.
+    Hardened to test 3 levels of nesting.
 
     Args:
         test_setup: Fixture providing test data.
@@ -180,8 +193,10 @@ def test_select_by_path(test_setup: tuple[list[str], ecflow.Defs]) -> None:
     tree.root = MagicMock()
     tree.root.data = "/"
 
-    suite_path = f"/{names[1]}"
-    task_path = suite_path + "/t2a"
+    suite_name = names[1]
+    suite_path = f"/{suite_name}"
+    fam_path = f"{suite_path}/f1"
+    task_path = f"{fam_path}/t1"
 
     # Mock children of root
     child_suite = MagicMock()
@@ -189,9 +204,14 @@ def test_select_by_path(test_setup: tuple[list[str], ecflow.Defs]) -> None:
     tree.root.children = [child_suite]
 
     # Mock children of suite
-    child_t2a = MagicMock()
-    child_t2a.data = task_path
-    child_suite.children = [child_t2a]
+    child_fam = MagicMock()
+    child_fam.data = fam_path
+    child_suite.children = [child_fam]
+
+    # Mock children of family
+    child_t1 = MagicMock()
+    child_t1.data = task_path
+    child_fam.children = [child_t1]
 
     with (
         patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop,
@@ -199,14 +219,18 @@ def test_select_by_path(test_setup: tuple[list[str], ecflow.Defs]) -> None:
         patch.object(SuiteTree, "_select_and_reveal") as mock_select,
     ):
         mock_app = MagicMock()
+        # Mock _thread_id to ensure call_from_thread is used
+        mock_app._thread_id = -1
         mock_app_prop.return_value = mock_app
+
         # Use logic method for synchronous test
         tree._select_by_path_logic(task_path)
 
-        # Should have called _load_children for root and suite
-        assert mock_load.call_count >= 2
+        # Should have called _load_children for root, suite, and family
+        assert mock_load.call_count >= 3
         mock_app.call_from_thread.assert_any_call(child_suite.expand)
-        mock_app.call_from_thread.assert_called_with(mock_select, child_t2a)
+        mock_app.call_from_thread.assert_any_call(child_fam.expand)
+        mock_app.call_from_thread.assert_called_with(mock_select, child_t1)
 
 
 def test_find_and_select_caching(test_setup: tuple[list[str], ecflow.Defs]) -> None:
