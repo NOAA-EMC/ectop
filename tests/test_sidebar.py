@@ -50,9 +50,11 @@ def live_defs(ecflow_server: str) -> ecflow.Defs:
     s2 = defs.add_suite(s2_name)
     s2.add_task("t2a")
 
-    # Load and begin
+    # Load and begin only our suites to avoid interference with other tests
+    # sharing the same session-scoped server.
     client.load(defs)
-    client.begin_all_suites()
+    client.begin_suite(s1_name)
+    client.begin_suite(s2_name)
 
     # Force states
     client.force_state(f"/{s1_name}", ecflow.State.complete)
