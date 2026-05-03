@@ -1,8 +1,3 @@
-# #############################################################################
-# WARNING: If you modify features, API, or usage, you MUST update the
-# documentation immediately.
-# #############################################################################
-
 # 🚀 ectop
 
 `ectop` is a high-performance, Textual-based Terminal User Interface (TUI) for monitoring and controlling [ecFlow](https://ecflow.readthedocs.io/en/latest/) servers. Designed for efficiency and responsiveness, it provides a modern alternative to traditional ecFlow monitoring tools.
