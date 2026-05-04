@@ -64,7 +64,8 @@ Select a task (e.g., `ectop_demo/operational/batch/process_1`) and press `l` to 
 Manage your workflow with simple keypresses:
 - **Suspend (`s`) / Resume (`u`)**: Pause or unpause nodes.
 - **Kill (`k`)**: Terminate an active task.
-- **Force Complete (`f`)**: Manually mark a task as successful.
+- **Execute (`x`)**: Immediately run a task, bypassing its triggers.
+- **Force Complete (`f`) / Aborted (`a`)**: Manually mark a task as successful or failed.
 - **Requeue (`Shift + R`)**: Reset a node and its children to the Queued state.
 
 ---
@@ -120,7 +121,7 @@ Need to fix a bug in a script?
 ## 🎮 Server Management
 
 `ectop` also allows you to control the ecFlow server itself:
-- **Halt Server (`Shift + H`)**: Stops the server from scheduling new tasks.
+- **Halt Server (`Shift + X`)**: Stops the server from scheduling new tasks.
 - **Start Server (`Shift + S`)**: Resumes scheduling.
 - **Load New Definitions (`Shift + L`)**: Load additional `.def` files without leaving the TUI.
 

@@ -49,7 +49,9 @@ Once `ectop` is running, you can use the following keys to interact with the app
 | `s` | **Suspend** | Suspends (pauses) the selected node. |
 | `u` | **Resume** | Resumes the selected suspended node. |
 | `k` | **Kill** | Kills the currently running task. |
+| `x` | **Execute** | Immediately runs the selected node (bypassing triggers). |
 | `f` | **Force Complete** | Manually sets the selected node to the `complete` state. |
+| `a` | **Force Aborted** | Manually sets the selected node to the `aborted` state. |
 | `R` (Shift+R) | **Requeue** | Resets the selected node and its children to the `queued` state. |
 
 ### Inspection & Editing
@@ -76,4 +78,4 @@ Once `ectop` is running, you can use the following keys to interact with the app
 | Key | Action | Description |
 |-----|--------|-------------|
 | `S` (Shift+S) | **Start Server** | Restarts the ecFlow server's scheduling (Sets server state to `RUNNING`). |
-| `H` (Shift+H) | **Halt Server** | Halts the ecFlow server's scheduling (Sets server state to `HALT`). |
+| `X` (Shift+X) | **Halt Server** | Halts the ecFlow server's scheduling (Sets server state to `HALT`). |

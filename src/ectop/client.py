@@ -300,6 +300,70 @@ class EcflowClient:
         """
         await asyncio.to_thread(self.force_complete_sync, path)
 
+    def force_aborted_sync(self, path: str) -> None:
+        """
+        Synchronously force a node to the aborted state.
+
+        Args:
+            path: The absolute path to the node.
+
+        Raises:
+            RuntimeError: If the node state cannot be forced.
+        """
+        with self._lock:
+            try:
+                self.client.force_state(path, ecflow.State.aborted)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to force aborted {path}: {e}") from e
+
+    async def force_aborted(self, path: str) -> None:
+        """
+        Force a node to the aborted state.
+
+        Args:
+            path: The absolute path to the node.
+
+        Raises:
+            RuntimeError: If the node state cannot be forced.
+
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+        """
+        await asyncio.to_thread(self.force_aborted_sync, path)
+
+    def run_sync(self, path: str, force: bool = False) -> None:
+        """
+        Synchronously run a node (bypass triggers).
+
+        Args:
+            path: The absolute path to the node.
+            force: If True, run even if nodes are active or submitted. Defaults to False.
+
+        Raises:
+            RuntimeError: If the node cannot be run.
+        """
+        with self._lock:
+            try:
+                self.client.run(path, force)
+            except RuntimeError as e:
+                raise RuntimeError(f"Failed to run {path}: {e}") from e
+
+    async def run(self, path: str, force: bool = False) -> None:
+        """
+        Run a node (bypass triggers).
+
+        Args:
+            path: The absolute path to the node.
+            force: If True, run even if nodes are active or submitted. Defaults to False.
+
+        Raises:
+            RuntimeError: If the node cannot be run.
+
+        Notes:
+            This is an async method that runs the blocking call in a separate thread.
+        """
+        await asyncio.to_thread(self.run_sync, path, force)
+
     def alter_sync(self, path: str, alter_type: str, attr_type: str, name: str = "", value: str | None = None) -> None:
         """
         Synchronously alter a node attribute or variable.

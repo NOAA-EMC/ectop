@@ -76,7 +76,9 @@ class EctopCommands(Provider):
             ("Suspend Node", app.action_suspend, "Suspend the currently selected node"),
             ("Resume Node", app.action_resume, "Resume the currently selected node"),
             ("Kill Node", app.action_kill, "Kill the currently selected node"),
+            ("Execute", app.action_run, "Immediately run the currently selected node"),
             ("Force Complete", app.action_force, "Force complete the currently selected node"),
+            ("Force Aborted", app.action_force_aborted, "Force abort the currently selected node"),
             ("Cycle Filter", app.action_cycle_filter, "Cycle status filters (All, Aborted, Active...)"),
             ("Requeue", app.action_requeue, "Requeue the currently selected node"),
             ("Copy Path", app.action_copy_path, "Copy the selected node path"),
@@ -264,13 +266,15 @@ class Ectop(App):
         Binding("s", "suspend", "Suspend"),
         Binding("u", "resume", "Resume"),
         Binding("k", "kill", "Kill"),
+        Binding("x", "run", "Execute"),
         Binding("f", "force", "Force Complete"),
+        Binding("a", "force_aborted", "Force Aborted"),
         Binding("F", "cycle_filter", "Cycle Filter"),
         Binding("H", "toggle_focus", "Focus Mode"),
         Binding("R", "requeue", "Requeue"),
         Binding("c", "copy_path", "Copy Path"),
         Binding("S", "restart_server", "Start Server"),
-        Binding("H", "halt_server", "Halt Server"),
+        Binding("X", "halt_server", "Halt Server"),
         Binding("/", "search", "Search"),
         Binding("w", "why", "Why?"),
         Binding("e", "edit_script", "Edit & Rerun"),
@@ -552,6 +556,18 @@ class Ectop(App):
         Force complete the selected node.
         """
         self._run_client_command("force_complete", self.get_selected_path())
+
+    def action_force_aborted(self) -> None:
+        """
+        Force abort the selected node.
+        """
+        self._run_client_command("force_aborted", self.get_selected_path())
+
+    def action_run(self) -> None:
+        """
+        Execute the selected node immediately.
+        """
+        self._run_client_command("run", self.get_selected_path())
 
     def action_cycle_filter(self) -> None:
         """
