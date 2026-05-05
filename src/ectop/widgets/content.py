@@ -11,10 +11,13 @@ Main content area for displaying ecFlow node information.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rich.syntax import Syntax
 from textual import work
+
+if TYPE_CHECKING:
+    from ectop.widgets.timeline import TimelineData
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.reactive import reactive
@@ -191,14 +194,14 @@ class MainContent(Vertical):
         """
         self.job_content = content
 
-    def update_timeline(self, node: Any) -> None:
+    def update_timeline(self, data: TimelineData | None) -> None:
         """
         Update the Timeline tab.
 
         Args:
-            node: The ecFlow node.
+            data: The pre-processed timeline data.
         """
-        self.query_one("#view_timeline", TimelineTab).update_timeline(node)
+        self.query_one("#view_timeline", TimelineTab).update_timeline(data)
 
     def action_search(self) -> None:
         """
