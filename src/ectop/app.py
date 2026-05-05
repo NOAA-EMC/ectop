@@ -48,6 +48,7 @@ from ectop.widgets.modals.zombies import ZombieDashboard
 from ectop.widgets.search import SearchBox
 from ectop.widgets.sidebar import SuiteTree
 from ectop.widgets.statusbar import StatusBar
+from ectop.widgets.timeline import gather_timeline_data
 
 
 class EctopCommands(Provider):
@@ -545,7 +546,8 @@ class Ectop(App):
         if tree.defs:
             node = tree.defs.find_abs_node(path)
             if node:
-                content_area.update_timeline(node)
+                timeline_data = await asyncio.to_thread(gather_timeline_data, node)
+                content_area.update_timeline(timeline_data)
 
     @work
     async def _run_client_command(self, command_name: str, path: str | None) -> None:
