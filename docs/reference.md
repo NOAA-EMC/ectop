@@ -15,6 +15,7 @@ This section contains the automatically generated API documentation for `ectop`.
 ::: ectop.widgets.search
 ::: ectop.widgets.sidebar
 ::: ectop.widgets.statusbar
+::: ectop.widgets.timeline
 
 ## Modals
 
@@ -22,3 +23,4 @@ This section contains the automatically generated API documentation for `ectop`.
 ::: ectop.widgets.modals.load
 ::: ectop.widgets.modals.variables
 ::: ectop.widgets.modals.why
+::: ectop.widgets.modals.zombies

@@ -1,8 +1,3 @@
-# #############################################################################
-# WARNING: If you modify features, API, or usage, you MUST update the
-# documentation immediately.
-# #############################################################################
-
 # Tutorial: Mastering ectop
 
 This tutorial will guide you through using `ectop` to monitor and manage a realistic ecFlow suite.
@@ -123,6 +118,7 @@ Need to fix a bug in a script?
 `ectop` also allows you to control the ecFlow server itself:
 - **Halt Server (`Shift + X`)**: Stops the server from scheduling new tasks.
 - **Start Server (`Shift + S`)**: Resumes scheduling.
+- **Begin Suite (`b`)**: Starts playback of the selected suite.
 - **Load New Definitions (`Shift + L`)**: Load additional `.def` files without leaving the TUI.
 
 ---

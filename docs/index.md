@@ -21,6 +21,8 @@
 - **❓ Why?**: A dedicated "Why" inspector to understand why a node is in its current state (e.g., waiting for triggers or limits).
 - **📝 Variable Management**: View and modify node variables (Edit and Add) on the fly.
 - **✍️ Interactive Script Editing**: Edit scripts using your preferred local editor (via `$EDITOR`) and update them on the ecFlow server instantly.
+- **📊 Performance Timeline**: Visualize task runtimes and state changes relative to siblings or children.
+- **🧟 Zombie Management**: Dedicated dashboard to view and resolve orphaned ecFlow jobs.
 
 ## ⏱️ Quick Start
 

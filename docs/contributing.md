@@ -1,8 +1,3 @@
-# #############################################################################
-# WARNING: If you modify features, API, or usage, you MUST update the
-# documentation immediately.
-# #############################################################################
-
 # Contributing to ectop
 
 Thank you for your interest in improving `ectop`!

@@ -77,5 +77,7 @@ Once `ectop` is running, you can use the following keys to interact with the app
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `S` (Shift+S) | **Start Server** | Restarts the ecFlow server's scheduling (Sets server state to `RUNNING`). |
-| `X` (Shift+X) | **Halt Server** | Halts the ecFlow server's scheduling (Sets server state to `HALT`). |
+| `S` (Shift+S) | **Start Server** | Starts server scheduling (RUNNING). |
+| `X` (Shift+X) | **Halt Server** | Halts server scheduling (HALT). |
+| `b` | **Begin Suite** | Begins playback of the selected suite. |
+| `L` (Shift+L) | **Load Defs** | Opens a modal to load an ecFlow definition file from disk. |
