@@ -214,3 +214,7 @@ examples/ectop_demo_home/
 *.ecf.check.*
 miniforge.sh
 miniforge3/
+
+# Local tools
+bin/
+micromamba

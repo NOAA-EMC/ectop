@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import subprocess
 import tempfile
 from typing import Any
 
@@ -346,6 +345,13 @@ class Ectop(App):
         """
         Perform initial connection to the ecFlow server.
 
+        Returns:
+            None
+
+        Raises:
+            RuntimeError: If connection to the server fails.
+            Exception: For unexpected errors.
+
         Notes:
             This is an async background worker.
         """
@@ -375,6 +381,13 @@ class Ectop(App):
     async def action_refresh(self) -> None:
         """
         Fetch suites from server and rebuild the tree.
+
+        Returns:
+            None
+
+        Raises:
+            RuntimeError: If synchronization with the server fails.
+            Exception: For unexpected errors.
 
         Notes:
             This is an async background worker.
@@ -411,6 +424,15 @@ class Ectop(App):
     async def action_restart_server(self) -> None:
         """
         Restart the ecFlow server (RUNNING).
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If restarting the server fails.
+
+        Notes:
+            This is an async background worker.
         """
         if not self.ecflow_client:
             return
@@ -425,6 +447,15 @@ class Ectop(App):
     async def action_halt_server(self) -> None:
         """
         Halt the ecFlow server (HALT).
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If halting the server fails.
+
+        Notes:
+            This is an async background worker.
         """
         if not self.ecflow_client:
             return
@@ -465,6 +496,13 @@ class Ectop(App):
 
         Args:
             path: The ecFlow node path.
+
+        Returns:
+            None
+
+        Raises:
+            RuntimeError: If fetching the script or starting the editor fails.
+            Exception: For unexpected errors.
 
         Notes:
             This is an async background worker.
@@ -651,6 +689,13 @@ class Ectop(App):
         Args:
             path: The ecFlow node path.
 
+        Returns:
+            None
+
+        Raises:
+            RuntimeError: If fetching the script fails.
+            Exception: For unexpected errors.
+
         Notes:
             This is an async background worker.
         """
@@ -727,6 +772,16 @@ class Ectop(App):
 
         Args:
             filepath: The path to the .def file.
+
+        Returns:
+            None
+
+        Raises:
+            RuntimeError: If loading the definition fails.
+            Exception: For unexpected errors.
+
+        Notes:
+            This is an async background worker.
         """
         if not self.ecflow_client:
             return
@@ -763,6 +818,9 @@ class Ectop(App):
         Args:
             path: The ecFlow node path.
 
+        Returns:
+            None
+
         Notes:
             This is an async background worker.
         """
@@ -771,18 +829,22 @@ class Ectop(App):
 
         try:
             content = await self.ecflow_client.file(path, "script")
-            with tempfile.NamedTemporaryFile(suffix=".ecf", delete=False, mode="w") as f:
-                f.write(content)
-                temp_path = f.name
 
-            self._run_editor(temp_path, path, content)
+            def _write_temp() -> str:
+                with tempfile.NamedTemporaryFile(suffix=".ecf", delete=False, mode="w") as f:
+                    f.write(content)
+                    return f.name
+
+            temp_path = await asyncio.to_thread(_write_temp)
+
+            await self._run_editor(temp_path, path, content)
 
         except RuntimeError as e:
             self.notify(f"Edit Error: {e}", severity="error")
         except Exception as e:
             self.notify(f"Unexpected Error: {e}", severity="error")
 
-    def _run_editor(self, temp_path: str, path: str, old_content: str) -> None:
+    async def _run_editor(self, temp_path: str, path: str, old_content: str) -> None:
         """
         Run the editor in a suspended state.
 
@@ -790,12 +852,30 @@ class Ectop(App):
             temp_path: Path to the temporary file.
             path: The ecFlow node path.
             old_content: The original content of the script.
-        """
-        editor = os.environ.get("EDITOR", DEFAULT_EDITOR)
-        with self.suspend():
-            subprocess.run([editor, temp_path], check=False)
 
-        self._finish_edit(temp_path, path, old_content)
+        Returns:
+            None
+
+        Raises:
+            RuntimeError: If the editor process fails to start or return.
+
+        Notes:
+            This is an async method that uses `asyncio.create_subprocess_exec`
+            to avoid blocking the event loop while the TUI is suspended.
+        """
+        from textual.app import SuspendNotSupported
+
+        editor = os.environ.get("EDITOR", DEFAULT_EDITOR)
+        try:
+            with self.suspend():
+                process = await asyncio.create_subprocess_exec(editor, temp_path)
+                await process.wait()
+        except SuspendNotSupported:
+            # Fallback for environments that do not support suspend (e.g., some tests)
+            process = await asyncio.create_subprocess_exec(editor, temp_path)
+            await process.wait()
+
+        await self._finish_edit(temp_path, path, old_content)
 
     @work
     async def _finish_edit(self, temp_path: str, path: str, old_content: str) -> None:
@@ -806,6 +886,16 @@ class Ectop(App):
             temp_path: Path to the temporary file.
             path: The ecFlow node path.
             old_content: The original content of the script.
+
+        Returns:
+            None
+
+        Raises:
+            RuntimeError: If updating the script on the server fails.
+            Exception: For unexpected errors.
+
+        Notes:
+            This is an async background worker.
         """
         try:
             # We can use asyncio.to_thread for reading the file to stay non-blocking

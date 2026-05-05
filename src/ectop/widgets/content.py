@@ -249,6 +249,12 @@ class MainContent(Vertical):
             query: The search query.
             content: The content to search.
             label: The label of the content being searched.
+
+        Returns:
+            None
+
+        Notes:
+            This is a threaded background worker.
         """
         matches = content.lower().count(query.lower())
         if matches > 0:
