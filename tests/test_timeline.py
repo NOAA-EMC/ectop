@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import ecflow
 from rich.text import Text
 
-from ectop.widgets.timeline import TimelineTab, TimelineData, TimelineEvent, gather_timeline_data
+from ectop.widgets.timeline import TimelineData, TimelineEvent, TimelineTab, gather_timeline_data
 
 
 def test_gather_timeline_data():
@@ -25,7 +25,7 @@ def test_gather_timeline_data():
     suite = defs.add_suite("s1")
     fam = suite.add_family("f1")
     t1 = fam.add_task("t1")
-    t2 = fam.add_task("t2")
+    fam.add_task("t2")
 
     # ecFlow doesn't allow setting state change time directly easily in Python without a server
     # but we can verify it handles the 'not-a-date-time' case or mock the specific node method if needed.
@@ -35,6 +35,7 @@ def test_gather_timeline_data():
     assert data.title == "Timeline for /s1/f1"
     # Initially they might have 'not-a-date-time' if not run
     assert len(data.events) == 0
+
 
 def test_timeline_render():
     """
@@ -64,6 +65,7 @@ def test_timeline_render():
         assert "active" in text_content
         assert "10:00:00" in text_content
         assert "10:05:00" in text_content
+
 
 def test_timeline_empty():
     """
