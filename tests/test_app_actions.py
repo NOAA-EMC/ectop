@@ -91,3 +91,44 @@ async def test_run_client_command_success(app: Ectop, tmp_path) -> None:
     await app.ecflow_client.sync_local()
     defs = await app.ecflow_client.get_defs()
     assert not defs.find_suite("s2").is_suspended()
+
+
+@pytest.mark.asyncio
+async def test_action_force_aborted(app: Ectop, tmp_path) -> None:
+    """Test action_force_aborted correctly marks a node as aborted."""
+    suite_name = "test_app_fa"
+    defs_file = tmp_path / f"{suite_name}.def"
+    defs_file.write_text(f"suite {suite_name}\n  task t1\nendsuite")
+    await app.ecflow_client.load_defs(str(defs_file))
+
+    with patch.object(app, "get_selected_path", return_value=f"/{suite_name}/t1"), patch.object(app, "action_refresh"):
+        app.action_force_aborted()
+        # action_force_aborted triggers a background worker (@work)
+        # In tests, mock_work runs it synchronously or returns a task.
+        # We need to wait for it.
+        await app.ecflow_client.sync_local()
+
+    # Verify state
+    await app.ecflow_client.sync_local()
+    defs = await app.ecflow_client.get_defs()
+    assert str(defs.find_abs_node(f"/{suite_name}/t1").get_state()) == "aborted"
+
+
+@pytest.mark.asyncio
+async def test_action_run(app: Ectop, tmp_path) -> None:
+    """Test action_run correctly executes a node."""
+    suite_name = "test_app_run"
+    defs_file = tmp_path / f"{suite_name}.def"
+    defs_file.write_text(f"suite {suite_name}\n  task t1\nendsuite")
+    await app.ecflow_client.load_defs(str(defs_file))
+    await app.ecflow_client.begin_suite(suite_name)
+
+    with patch.object(app, "get_selected_path", return_value=f"/{suite_name}/t1"), patch.object(app, "action_refresh"):
+        app.action_run()
+        await app.ecflow_client.sync_local()
+
+    # Verify state is no longer queued
+    await app.ecflow_client.sync_local()
+    defs = await app.ecflow_client.get_defs()
+    state = str(defs.find_abs_node(f"/{suite_name}/t1").get_state())
+    assert state in ("active", "submitted", "complete", "aborted")

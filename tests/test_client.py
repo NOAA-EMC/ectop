@@ -15,6 +15,33 @@ def client_instance(ecflow_server):
 
 
 @pytest.mark.asyncio
+async def test_client_force_aborted_success(client_instance, tmp_path):
+    defs_file = tmp_path / "test_fa.def"
+    defs_file.write_text("suite test_fa\n  task t1\nendsuite")
+    await client_instance.load_defs(str(defs_file))
+
+    await client_instance.force_aborted("/test_fa/t1")
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    assert str(defs.find_abs_node("/test_fa/t1").get_state()) == "aborted"
+
+
+@pytest.mark.asyncio
+async def test_client_run_success(client_instance, tmp_path):
+    defs_file = tmp_path / "test_run.def"
+    defs_file.write_text("suite test_run\n  task t1\nendsuite")
+    await client_instance.load_defs(str(defs_file))
+    await client_instance.begin_suite("test_run")
+
+    await client_instance.run("/test_run/t1")
+    # run() is async on server, so we might need a small wait or just check it's not queued
+    await client_instance.sync_local()
+    defs = await client_instance.get_defs()
+    state = str(defs.find_abs_node("/test_run/t1").get_state())
+    assert state in ("active", "submitted", "complete", "aborted")
+
+
+@pytest.mark.asyncio
 async def test_client_init(ecflow_server):
     host, port = ecflow_server.split(":")
     client = EcflowClient(host, int(port))
