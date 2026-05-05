@@ -2,6 +2,7 @@
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://NOAA-EMC.github.io/ectop/)
 [![Disclaimer](https://img.shields.io/badge/disclaimer-read%20first-yellow)](DISCLAIMER.md)
 
+
 # ectop
 
 `ectop` is a powerful Textual-based Terminal User Interface (TUI) for monitoring and controlling [ecFlow](https://ecflow.readthedocs.io/en/latest/) servers.
@@ -61,6 +62,16 @@ By default, it connects to `localhost:3141`.
 | `e` | Edit & Rerun script |
 | `t` | Toggle Live Log updates |
 | `v` | View/Edit Variables |
+| `x` | Execute selected node |
+| `a` | Force Aborted selected node |
+| `R` | Requeue selected node |
+| `c` | Copy Path to clipboard |
+| `S` | Start Server scheduling |
+| `X` | Halt Server scheduling |
+| `b` | Begin Suite playback |
+| `L` | Load New Definitions |
+| `Z` | Zombies Management |
+| `Ctrl+f` | Search in Content |
 
 ## Documentation
 
