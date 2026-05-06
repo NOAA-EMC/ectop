@@ -669,11 +669,11 @@ refresh and file loading) trigger stateful operations simultaneously.
 background population and lazy loading. By adding nodes in groups of 50
 via a single `call_from_thread` operation, we significantly reduce event
 loop pressure and UI &#34;jank&#34; in large environments.
-3.  **Aero Protocol Compliance:** 
+3.  **Aero Protocol Compliance:**
     - All modified code follows **Google-style docstrings**.
 - Removed AI-specific meta-references and non-standard block headers.
     - Standardized on `_safe_call` for all cross-thread UI updates.
-4.  **Harden Tests:** 
+4.  **Harden Tests:**
 - Added `tests/test_concurrency_harden.py` to verify lock serialization.
 - Added `tests/test_sidebar_performance.py` to verify batching logic.
     - Updated existing tests to reflect architectural changes.

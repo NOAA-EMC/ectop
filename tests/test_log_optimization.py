@@ -55,6 +55,7 @@ async def test_live_log_worker_delta_calculation():
     Test that _live_log_worker correctly offloads delta calculation.
     """
     from unittest.mock import AsyncMock
+
     app = Ectop()
     app.ecflow_client = MagicMock()
     app.ecflow_client.file = AsyncMock(return_value="Initial Content More")
@@ -76,6 +77,7 @@ async def test_live_log_worker_no_delta_calculation():
     Test that _live_log_worker handles cases where no incremental update is possible.
     """
     from unittest.mock import AsyncMock
+
     app = Ectop()
     app.ecflow_client = MagicMock()
     app.ecflow_client.file = AsyncMock(return_value="Completely Different Content")
