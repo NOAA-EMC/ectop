@@ -18,12 +18,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff
-      - name: Run Ruff
-        run: ruff check .
+          pip install -e .[dev]
+      - name: Run pre-commit
+        run: pre-commit run --all-files
 
   test:
+    needs: lint
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Conda/Miniforge
@@ -33,7 +37,7 @@ jobs:
           miniforge-version: latest
           activate-environment: ectop
           environment-file: environment.yml
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
           use-mamba: true
       - name: Install package
         shell: bash -el {0}
@@ -44,3 +48,20 @@ jobs:
       - name: Run smoke test
         shell: bash -el {0}
         run: python scripts/smoke_test.py
+
+  release:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: release
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Python Semantic Release
+        uses: python-semantic-release/python-semantic-release@v9.8.8
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}

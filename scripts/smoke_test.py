@@ -1,6 +1,8 @@
 # .. note:: warning: "If you modify features, API, or usage, you MUST update the documentation immediately."
 import os
+import random
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -8,8 +10,21 @@ import time
 import ecflow
 
 
+def get_free_port():
+    # ecFlow server requires port in range 1024-49151
+    for _ in range(100):
+        port = random.randint(1024, 49151)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("", port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError("Could not find a free port for ecFlow server")
+
+
 def run_smoke_test():
-    ecf_port = 3145
+    ecf_port = get_free_port()
     ecf_home = os.path.join(os.path.expanduser("~"), "ecflow_smoke_test_final")
     if os.path.exists(ecf_home):
         shutil.rmtree(ecf_home)
