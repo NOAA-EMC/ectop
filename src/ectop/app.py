@@ -699,14 +699,32 @@ class Ectop(App):
             Exception: For unexpected errors.
 
         Notes:
-            This is an async background worker.
+            This is an async background worker. Delta calculation is offloaded
+            to a thread to keep the UI responsive.
         """
         if not self.ecflow_client:
             return
         try:
             content = await self.ecflow_client.file(path, "jobout")
             content_area = self.query_one("#main_content", MainContent)
-            content_area.update_log(content, append=True)
+
+            cached = content_area._content_cache.get("output", "")
+            last_size = content_area.last_log_size
+
+            def _calculate_delta() -> str | None:
+                """
+                Calculate the log delta by comparing new content with cached content.
+
+                Returns:
+                    The new log content to append, or None if no incremental
+                    update is possible.
+                """
+                if content.startswith(cached) and len(content) > last_size:
+                    return content[last_size:]
+                return None
+
+            delta = await asyncio.to_thread(_calculate_delta)
+            content_area.update_log(content, delta=delta)
         except RuntimeError:
             pass
 

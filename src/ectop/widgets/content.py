@@ -114,7 +114,7 @@ class MainContent(Vertical):
         if not content or content == self._content_cache.get("output"):
             return
 
-        self.update_log(content, append=False)
+        self.update_log(content)
 
     def watch_script_content(self, content: str) -> None:
         """
@@ -146,35 +146,32 @@ class MainContent(Vertical):
         syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
         widget.update(syntax)
 
-    def update_log(self, content: str, append: bool = False) -> None:
+    def update_log(self, content: str, delta: str | None = None) -> None:
         """
         Update the Output log tab.
 
         Args:
-            content: The content to display or append.
-            append: Whether to attempt appending to existing content, by default False.
+            content: The full log content.
+            delta: Optional new content to append. If provided, expensive
+                full-content comparisons and clears are avoided.
         """
         widget = self.query_one("#log_output", RichLog)
+
+        if delta is not None:
+            if delta:
+                widget.write(delta)
+                self._content_cache["output"] = content
+                self.last_log_size = len(content)
+            return
 
         # Optimization: Return early if content is identical
         if content == self._content_cache.get("output"):
             return
 
-        # Check if we can actually append
-        actual_append = append and content.startswith(self._content_cache.get("output", ""))
-
-        if not actual_append:
-            widget.clear()
-            self.last_log_size = 0
-            self._content_cache["output"] = content
-            widget.write(content)
-            self.last_log_size = len(content)
-        else:
-            new_content = content[self.last_log_size :]
-            if new_content:
-                widget.write(new_content)
-                self._content_cache["output"] = content
-                self.last_log_size = len(content)
+        widget.clear()
+        self._content_cache["output"] = content
+        widget.write(content)
+        self.last_log_size = len(content)
 
     def update_script(self, content: str) -> None:
         """

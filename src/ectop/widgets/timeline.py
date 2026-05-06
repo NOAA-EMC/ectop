@@ -4,6 +4,9 @@
 # #############################################################################
 """
 Timeline widget for visualizing task runtimes.
+
+.. note::
+    If you modify features, API, or usage, you MUST update the documentation immediately.
 """
 
 from __future__ import annotations
@@ -61,7 +64,10 @@ def gather_timeline_data(node: ecflow.Node) -> TimelineData:
         node: The ecFlow node to gather data for.
 
     Returns:
-        A TimelineData object containing the extracted information.
+        TimelineData: An object containing the extracted information.
+
+    Raises:
+        RuntimeError: If there is an issue accessing ecFlow node attributes.
 
     Notes:
         This function performs I/O-like operations on ecFlow objects and
@@ -120,6 +126,9 @@ class TimelineTab(Static):
 
         Args:
             data: The pre-processed timeline data, or None if no data is available.
+
+        Returns:
+            None
         """
         if not data or not data.events:
             self.update(Text("No tasks to display in timeline.", style="italic"))
