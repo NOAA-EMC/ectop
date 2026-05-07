@@ -493,7 +493,7 @@ class Ectop(App):
     @work(exclusive=True)
     async def _load_node_worker(self, path: str) -> None:
         """
-        Worker to fetch files for a node.
+        Worker to fetch files for a node in parallel.
 
         Args:
             path: The ecFlow node path.
@@ -501,12 +501,9 @@ class Ectop(App):
         Returns:
             None
 
-        Raises:
-            RuntimeError: If fetching the script or starting the editor fails.
-            Exception: For unexpected errors.
-
         Notes:
-            This is an async background worker.
+            This is an async background worker. It uses asyncio.gather to
+            fetch jobout, script, job, and timeline data concurrently.
         """
         if not self.ecflow_client:
             return
@@ -520,34 +517,39 @@ class Ectop(App):
         except RuntimeError:
             pass
 
-        # 1. Output Log
-        try:
-            content = await self.ecflow_client.file(path, "jobout")
-            content_area.update_log(content)
-        except RuntimeError:
-            content_area.show_error("#log_output", "File type 'jobout' not found.")
+        async def _fetch_file(file_type: str, widget_id: str, update_fn: Any) -> None:
+            """
+            Internal helper to fetch a specific file type and update the UI.
 
-        # 2. Script
-        try:
-            content = await self.ecflow_client.file(path, "script")
-            content_area.update_script(content)
-        except RuntimeError:
-            content_area.show_error("#view_script", "File type 'script' not available.")
+            Args:
+                file_type: The ecFlow file type ('jobout', 'script', 'job').
+                widget_id: The ID of the widget to show errors in.
+                update_fn: The function to call with the fetched content.
+            """
+            try:
+                assert self.ecflow_client is not None
+                content = await self.ecflow_client.file(path, file_type)
+                update_fn(content)
+            except RuntimeError:
+                content_area.show_error(widget_id, f"File type '{file_type}' not available.")
 
-        # 3. Job
-        try:
-            content = await self.ecflow_client.file(path, "job")
-            content_area.update_job(content)
-        except RuntimeError:
-            content_area.show_error("#view_job", "File type 'job' not available.")
+        async def _fetch_timeline() -> None:
+            """
+            Internal helper to gather timeline data and update the UI.
+            """
+            tree = self.query_one("#suite_tree", SuiteTree)
+            if tree.defs:
+                node = tree.defs.find_abs_node(path)
+                if node:
+                    timeline_data = await asyncio.to_thread(gather_timeline_data, node)
+                    content_area.update_timeline(timeline_data)
 
-        # 4. Timeline
-        tree = self.query_one("#suite_tree", SuiteTree)
-        if tree.defs:
-            node = tree.defs.find_abs_node(path)
-            if node:
-                timeline_data = await asyncio.to_thread(gather_timeline_data, node)
-                content_area.update_timeline(timeline_data)
+        await asyncio.gather(
+            _fetch_file("jobout", "#log_output", content_area.update_log),
+            _fetch_file("script", "#view_script", content_area.update_script),
+            _fetch_file("job", "#view_job", content_area.update_job),
+            _fetch_timeline(),
+        )
 
     @work
     async def _run_client_command(self, command_name: str, path: str | None) -> None:
