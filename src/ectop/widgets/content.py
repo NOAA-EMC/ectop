@@ -14,7 +14,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from rich.syntax import Syntax
+from rich.text import Text
 from textual import work
+from textual.binding import Binding
 
 if TYPE_CHECKING:
     from ectop.widgets.timeline import TimelineData
@@ -38,7 +40,15 @@ class MainContent(Vertical):
     Attributes:
         is_live: Whether live log updates are enabled.
         last_log_size: The size of the log content at the last update.
+        search_query: The current search query.
+        search_results: List of (start, end) offsets for search matches.
+        current_result_index: The index of the currently active search match.
     """
+
+    BINDINGS = [
+        Binding("n", "search_next", "Next Match"),
+        Binding("N", "search_prev", "Prev Match"),
+    ]
 
     is_live: reactive[bool] = reactive(False, init=False)
     """Whether live log updates are enabled."""
@@ -51,6 +61,15 @@ class MainContent(Vertical):
 
     job_content: reactive[str] = reactive("", init=False)
     """The content of the job file."""
+
+    search_query: reactive[str] = reactive("", init=False)
+    """The current search query."""
+
+    search_results: reactive[list[tuple[int, int]]] = reactive([], init=False)
+    """List of (start, end) offsets for search matches."""
+
+    current_result_index: reactive[int] = reactive(0, init=False)
+    """The index of the currently active search match."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """
@@ -123,13 +142,16 @@ class MainContent(Vertical):
         Args:
             content: The new script content.
         """
-        if content == self._content_cache.get("script"):
+        if content == self._content_cache.get("script") and not self.search_query:
             return
 
         self._content_cache["script"] = content
         widget = self.query_one("#view_script", Static)
-        syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
-        widget.update(syntax)
+        if self.search_query and self.active == "tab_script":
+            widget.update(self._get_highlighted_content(content))
+        else:
+            syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
+            widget.update(syntax)
 
     def watch_job_content(self, content: str) -> None:
         """
@@ -138,13 +160,16 @@ class MainContent(Vertical):
         Args:
             content: The new job content.
         """
-        if content == self._content_cache.get("job"):
+        if content == self._content_cache.get("job") and not self.search_query:
             return
 
         self._content_cache["job"] = content
         widget = self.query_one("#view_job", Static)
-        syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
-        widget.update(syntax)
+        if self.search_query and self.active == "tab_job":
+            widget.update(self._get_highlighted_content(content))
+        else:
+            syntax = Syntax(content, DEFAULT_SHELL, theme=SYNTAX_THEME, line_numbers=True)
+            widget.update(syntax)
 
     def update_log(self, content: str, delta: str | None = None) -> None:
         """
@@ -156,6 +181,14 @@ class MainContent(Vertical):
                 full-content comparisons and clears are avoided.
         """
         widget = self.query_one("#log_output", RichLog)
+
+        if self.search_query:
+            # When searching, we don't use delta because we need to highlight the full text
+            widget.clear()
+            self._content_cache["output"] = content
+            widget.write(self._get_highlighted_content(content))
+            self.last_log_size = len(content)
+            return
 
         if delta is not None:
             if delta:
@@ -200,6 +233,85 @@ class MainContent(Vertical):
         """
         self.query_one("#view_timeline", TimelineTab).update_timeline(data)
 
+    def _get_highlighted_content(self, content: str) -> Text:
+        """
+        Apply search highlights to the content.
+
+        Args:
+            content: The raw content to highlight.
+
+        Returns:
+            A Rich Text object with highlights applied.
+        """
+        text = Text(content)
+        if not self.search_query or not self.search_results:
+            return text
+
+        for i, (start, end) in enumerate(self.search_results):
+            # Use orange for the current match, yellow for others
+            style = "bold black on orange3" if i == self.current_result_index else "bold black on yellow"
+            text.stylize(style, start, end)
+
+        return text
+
+    def action_search_next(self) -> None:
+        """
+        Navigate to the next search match.
+        """
+        if not self.search_results:
+            return
+        self.current_result_index = (self.current_result_index + 1) % len(self.search_results)
+        self._refresh_active_content()
+        self._scroll_to_current_match()
+
+    def action_search_prev(self) -> None:
+        """
+        Navigate to the previous search match.
+        """
+        if not self.search_results:
+            return
+        self.current_result_index = (self.current_result_index - 1) % len(self.search_results)
+        self._refresh_active_content()
+        self._scroll_to_current_match()
+
+    def _refresh_active_content(self) -> None:
+        """
+        Refresh the currently active tab's content to update highlights.
+        """
+        active_tab = self.active
+        if active_tab == "tab_output":
+            self.update_log(self._content_cache.get("output", ""))
+        elif active_tab == "tab_script":
+            self.watch_script_content(self._content_cache.get("script", ""))
+        elif active_tab == "tab_job":
+            self.watch_job_content(self._content_cache.get("job", ""))
+
+    def _scroll_to_current_match(self) -> None:
+        """
+        Scroll the active view to the current search match.
+        """
+        if not self.search_results:
+            return
+
+        start, _ = self.search_results[self.current_result_index]
+        active_tab = self.active
+        content = ""
+        scroll_container = None
+
+        if active_tab == "tab_output":
+            content = self._content_cache.get("output", "")
+            scroll_container = self.query_one("#log_output", RichLog)
+        elif active_tab == "tab_script":
+            content = self._content_cache.get("script", "")
+            scroll_container = self.query_one("#tab_script VerticalScroll", VerticalScroll)
+        elif active_tab == "tab_job":
+            content = self._content_cache.get("job", "")
+            scroll_container = self.query_one("#tab_job VerticalScroll", VerticalScroll)
+
+        if scroll_container and content:
+            line_no = content.count("\n", 0, start)
+            scroll_container.scroll_to(y=line_no, animate=False)
+
     def action_search(self) -> None:
         """
         Toggle the content search input.
@@ -210,6 +322,10 @@ class MainContent(Vertical):
             search_input.focus()
         else:
             search_input.add_class("hidden")
+            self.search_query = ""
+            self.search_results = []
+            self.current_result_index = 0
+            self._refresh_active_content()
             # Refocus the active tab's content
             active_tab = self.active
             if active_tab == "tab_output":
@@ -256,11 +372,32 @@ class MainContent(Vertical):
         Notes:
             This is a threaded background worker.
         """
-        matches = content.lower().count(query.lower())
-        if matches > 0:
-            safe_call_app(self.app, self.app.notify, f"Found {matches} matches for '{query}' in {label}", severity="information")
-        else:
-            safe_call_app(self.app, self.app.notify, f"No matches found for '{query}' in {label}", severity="warning")
+        import re
+
+        # Find all match offsets (start, end) case-insensitively
+        try:
+            matches = [(m.start(), m.end()) for m in re.finditer(re.escape(query), content, re.IGNORECASE)]
+        except Exception:
+            matches = []
+
+        def _update_ui() -> None:
+            self.search_query = query
+            self.search_results = matches
+            self.current_result_index = 0
+            if matches:
+                self.app.notify(f"Found {len(matches)} matches for '{query}' in {label}", severity="information")
+                # Trigger a refresh of the current tab content with highlights
+                active_tab = self.active
+                if active_tab == "tab_output":
+                    self.update_log(content)
+                elif active_tab == "tab_script":
+                    self.watch_script_content(content)
+                elif active_tab == "tab_job":
+                    self.watch_job_content(content)
+            else:
+                self.app.notify(f"No matches found for '{query}' in {label}", severity="warning")
+
+        safe_call_app(self.app, _update_ui)
 
     def show_error(self, widget_id: str, message: str) -> None:
         """
