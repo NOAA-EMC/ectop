@@ -18,7 +18,6 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import ecflow
 import pytest
-from rich.text import Text
 
 from ectop.widgets.sidebar import SuiteTree
 
@@ -88,6 +87,7 @@ async def test_update_tree_integrated(ecflow_server: str, test_setup: tuple[list
         test_setup: Fixture providing test names and definitions.
     """
     from ectop.app import Ectop
+
     host, port = ecflow_server.split(":")
     names, real_defs = test_setup
 
@@ -118,6 +118,7 @@ async def test_load_children_integrated(ecflow_server: str, test_setup: tuple[li
         test_setup: Fixture providing test names and definitions.
     """
     from ectop.app import Ectop
+
     host, port = ecflow_server.split(":")
     names, real_defs = test_setup
 
