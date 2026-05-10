@@ -177,7 +177,7 @@ def test_load_children_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None
         assert args[1] == ui_node
         # Should have 3 children: t2a, t2b, t2c
         assert len(args[2]) == 3
-        child_names = [c.name() for c in args[2]]
+        child_names = [c.name for c in args[2]]
         assert "t2a" in child_names
         assert "t2b" in child_names
         assert "t2c" in child_names
@@ -374,6 +374,6 @@ def test_populate_tree_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None
         assert args[1] == tree.root
 
         # Verify our suites are in the batch (they might be among others)
-        batch_suites = [s.name() for s in args[2]]
+        batch_suites = [s.name for s in args[2]]
         assert names[0] in batch_suites
         assert names[1] in batch_suites

@@ -927,8 +927,8 @@ class Ectop(App):
 
             new_content = await asyncio.to_thread(_read_file)
 
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
+            if await asyncio.to_thread(os.path.exists, temp_path):
+                await asyncio.to_thread(os.unlink, temp_path)
 
             if new_content != old_content:
                 if self.ecflow_client:

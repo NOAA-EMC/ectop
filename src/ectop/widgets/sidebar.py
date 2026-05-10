@@ -12,6 +12,7 @@ Sidebar widget for the ecFlow suite tree.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 import ecflow
@@ -34,6 +35,26 @@ from ectop.utils import safe_call_app
 
 if TYPE_CHECKING:
     from ecflow import Defs, Node
+
+
+@dataclass
+class NodeDTO:
+    """
+    Data Transfer Object for ecFlow Node state, decoupling UI from C++ API.
+
+    Attributes:
+        name: The name of the node.
+        path: The absolute path of the node.
+        state: The current state of the node.
+        is_container: Whether the node is a Suite or Family.
+        has_children: Whether the node has children.
+    """
+
+    name: str
+    path: str
+    state: str
+    is_container: bool
+    has_children: bool
 
 
 class SuiteTree(Tree[str]):
@@ -248,8 +269,9 @@ class SuiteTree(Tree[str]):
         suites = [s for s in cast("list[ecflow.Suite]", self.defs.suites) if self._should_show_node(s)]
         batch_size = 50
         for i in range(0, len(suites), batch_size):
-            batch = suites[i : i + batch_size]
-            self._safe_call(self._add_nodes_batch, self.root, batch)
+            batch_nodes = suites[i : i + batch_size]
+            batch_dtos = [self._to_dto(s) for s in batch_nodes]
+            self._safe_call(self._add_nodes_batch, self.root, batch_dtos)
 
         # Restore selection if we have a saved path
         if self._last_selected_path:
@@ -257,16 +279,43 @@ class SuiteTree(Tree[str]):
             self._last_selected_path = None
             self._select_by_path_logic(path_to_restore)
 
-    def _add_nodes_batch(self, parent_ui_node: TreeNode[str], ecflow_nodes: list[ecflow.Node]) -> None:
+    def _add_nodes_batch(self, parent_ui_node: TreeNode[str], node_dtos: list[NodeDTO]) -> None:
         """
         Batch add nodes to the UI to reduce main thread pressure.
 
         Args:
             parent_ui_node: The parent UI node.
-            ecflow_nodes: List of ecFlow nodes to add.
+            node_dtos: List of NodeDTO objects to add.
         """
-        for ecflow_node in ecflow_nodes:
-            self._add_node_to_ui(parent_ui_node, ecflow_node)
+        for dto in node_dtos:
+            self._add_node_to_ui(parent_ui_node, dto)
+
+    def _to_dto(self, node: ecflow.Node) -> NodeDTO:
+        """
+        Convert an ecflow.Node to a NodeDTO.
+
+        Args:
+            node: The ecFlow node to convert.
+
+        Returns:
+            The corresponding NodeDTO.
+        """
+        has_children = False
+        is_container = isinstance(node, ecflow.Family | ecflow.Suite)
+        if is_container and hasattr(node, "nodes"):
+            try:
+                next(iter(node.nodes))
+                has_children = True
+            except (StopIteration, RuntimeError):
+                pass
+
+        return NodeDTO(
+            name=node.name(),
+            path=node.get_abs_node_path(),
+            state=str(node.get_state()),
+            is_container=is_container,
+            has_children=has_children,
+        )
 
     def _should_show_node(self, node: Node) -> bool:
         """
@@ -314,45 +363,32 @@ class SuiteTree(Tree[str]):
         state = "ON" if self.focus_mode else "OFF"
         self.app.notify(f"Focus Mode: {state}")
 
-    def _add_node_to_ui(self, parent_ui_node: TreeNode[str], ecflow_node: ecflow.Node) -> TreeNode[str]:
+    def _add_node_to_ui(self, parent_ui_node: TreeNode[str], dto: NodeDTO) -> TreeNode[str]:
         """
-        Add a single ecflow node to the UI tree.
+        Add a single ecflow node to the UI tree using a DTO.
 
         Args:
             parent_ui_node: The parent node in the Textual tree.
-            ecflow_node: The ecFlow node to add.
+            dto: The NodeDTO to add.
 
         Returns:
             The newly created UI node.
         """
-        state = str(ecflow_node.get_state())
-        icon = STATE_MAP.get(state, ICON_UNKNOWN_STATE)
+        icon = STATE_MAP.get(dto.state, ICON_UNKNOWN_STATE)
+        type_icon = ICON_FAMILY if dto.is_container else ICON_TASK
 
-        is_container = isinstance(ecflow_node, ecflow.Family | ecflow.Suite)
-        type_icon = ICON_FAMILY if is_container else ICON_TASK
-
-        label = Text(f"{icon} {type_icon} {ecflow_node.name()} ")
-        label.append(f"[{state}]", style="bold italic")
+        label = Text(f"{icon} {type_icon} {dto.name} ")
+        label.append(f"[{dto.state}]", style="bold italic")
 
         new_ui_node = parent_ui_node.add(
             label,
-            data=ecflow_node.get_abs_node_path(),
+            data=dto.path,
             expand=False,
         )
 
         # If it's a container and has children, add a placeholder for lazy loading
-        if is_container and hasattr(ecflow_node, "nodes"):
-            # Use a more efficient check for presence of children than len(list(...))
-            has_children = False
-            try:
-                # Check if there is at least one child
-                next(iter(ecflow_node.nodes))
-                has_children = True
-            except (StopIteration, RuntimeError):
-                pass
-
-            if has_children:
-                new_ui_node.add(LOADING_PLACEHOLDER, allow_expand=False)
+        if dto.is_container and dto.has_children:
+            new_ui_node.add(LOADING_PLACEHOLDER, allow_expand=False)
 
         return new_ui_node
 
@@ -391,7 +427,8 @@ class SuiteTree(Tree[str]):
                 if ecflow_node and hasattr(ecflow_node, "nodes"):
                     # Use batching even for sync loading to keep implementation consistent
                     nodes = list(ecflow_node.nodes)
-                    self._safe_call(self._add_nodes_batch, ui_node, nodes)
+                    dtos = [self._to_dto(n) for n in nodes]
+                    self._safe_call(self._add_nodes_batch, ui_node, dtos)
             else:
                 self._load_children_worker(ui_node, ui_node.data)
 
@@ -415,8 +452,9 @@ class SuiteTree(Tree[str]):
             children = [c for c in cast("list[ecflow.Node]", ecflow_node.nodes) if self._should_show_node(c)]
             batch_size = 50
             for i in range(0, len(children), batch_size):
-                batch = children[i : i + batch_size]
-                self._safe_call(self._add_nodes_batch, ui_node, batch)
+                batch_nodes = children[i : i + batch_size]
+                batch_dtos = [self._to_dto(c) for c in batch_nodes]
+                self._safe_call(self._add_nodes_batch, ui_node, batch_dtos)
 
     @work(exclusive=True, thread=True)
     def find_and_select(self, query: str) -> None:
