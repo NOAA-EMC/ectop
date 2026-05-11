@@ -34,12 +34,9 @@ class SearchBox(Input):
         """
         Initialize the SearchBox.
 
-        Parameters
-        ----------
-        *args : Any
-            Positional arguments for the Input widget.
-        **kwargs : Any
-            Keyword arguments for the Input widget.
+        Args:
+            *args: Positional arguments for the Input widget.
+            **kwargs: Keyword arguments for the Input widget.
         """
         super().__init__(*args, **kwargs)
 

@@ -38,12 +38,9 @@ class ConfirmModal(ModalScreen[None]):
         """
         Initialize the ConfirmModal.
 
-        Parameters
-        ----------
-        message : str
-            The message to display in the modal.
-        callback : Callable[[], None]
-            The function to call if confirmed.
+        Args:
+            message: The message to display in the modal.
+            callback: The function to call if confirmed.
         """
         super().__init__()
         self.message: str = message
@@ -53,9 +50,7 @@ class ConfirmModal(ModalScreen[None]):
         """
         Compose the modal UI.
 
-        Returns
-        -------
-        ComposeResult
+        Returns:
             The UI components for the modal.
         """
         with Vertical(id="confirm_container"):
@@ -77,10 +72,8 @@ class ConfirmModal(ModalScreen[None]):
         """
         Handle button press events.
 
-        Parameters
-        ----------
-        event : Button.Pressed
-            The button press event.
+        Args:
+            event: The button press event.
         """
         if event.button.id == "yes_btn":
             self.action_confirm()

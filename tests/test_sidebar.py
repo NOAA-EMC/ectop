@@ -18,7 +18,6 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import ecflow
 import pytest
-from rich.text import Text
 
 from ectop.widgets.sidebar import SuiteTree
 
@@ -78,109 +77,87 @@ def test_setup(ecflow_server: str, unique_suite_names: Callable[[int], list[str]
     return names, client.get_defs()
 
 
-def test_update_tree(test_setup: tuple[list[str], ecflow.Defs]) -> None:
+@pytest.mark.asyncio
+async def test_update_tree_integrated(ecflow_server: str, unique_suite_names: Callable[[int], list[str]]) -> None:
     """
-    Test that update_tree clears and repopulates the tree.
+    Test that update_tree clears and repopulates the tree in a live app.
 
     Args:
-        test_setup: Fixture providing test data.
+        ecflow_server: The host:port of the live ecFlow server.
+        unique_suite_names: Fixture to generate unique suite names.
     """
-    names, real_defs = test_setup
-    tree = SuiteTree("Test")
-    tree.clear = MagicMock()
-    tree.root = MagicMock()
+    from ectop.app import Ectop
 
-    # Mock _add_node_to_ui and _build_caches_and_populate to avoid Textual internals and threading
-    with patch.object(SuiteTree, "_add_node_to_ui"), patch.object(SuiteTree, "_build_caches_and_populate") as mock_worker:
-        tree.update_tree("localhost", 3141, real_defs)
+    host, port = ecflow_server.split(":")
+    client = ecflow.Client(host, int(port))
+    client.restart_server()
 
-        tree.clear.assert_called_once()
-        assert tree.defs == real_defs
-        mock_worker.assert_called_once()
+    suite_name = unique_suite_names(1)[0]
+    defs = ecflow.Defs()
+    defs.add_suite(suite_name)
+    client.load(defs, force=True)
+
+    app = Ectop(host=host, port=int(port))
+    async with app.run_test() as pilot:
+        tree = app.query_one(SuiteTree)
+        # Wait for tree to populate
+        for _ in range(50):
+            if any(c.data == f"/{suite_name}" for c in tree.root.children):
+                break
+            await pilot.pause(0.1)
+
+        assert any(c.data == f"/{suite_name}" for c in tree.root.children)
+        assert str(tree.host) == host
+        assert int(tree.port) == int(port)
 
 
-def test_load_children(test_setup: tuple[list[str], ecflow.Defs]) -> None:
+@pytest.mark.asyncio
+async def test_load_children_integrated(ecflow_server: str, unique_suite_names: Callable[[int], list[str]]) -> None:
     """
-    Test that _load_children calls the worker.
+    Test that expanding a node loads its children from the server.
 
     Args:
-        test_setup: Fixture providing test data.
+        ecflow_server: The host:port of the live ecFlow server.
+        unique_suite_names: Fixture to generate unique suite names.
     """
-    names, real_defs = test_setup
+    from ectop.app import Ectop
 
-    # Add more children to the second suite to test multi-node batching
-    suite2 = real_defs.find_suite(names[1])
-    suite2.add_task("t2b")
-    suite2.add_task("t2c")
+    host, port = ecflow_server.split(":")
+    client = ecflow.Client(host, int(port))
 
-    tree = SuiteTree("Test")
-    tree.defs = real_defs
+    suite_name = unique_suite_names(1)[0]
+    defs = ecflow.Defs()
+    suite = defs.add_suite(suite_name)
+    suite.add_task("task1")
+    client.load(defs, force=True)
 
-    # Find a suite path from real_defs
-    suite_path = f"/{names[0]}"
+    app = Ectop(host=host, port=int(port))
+    async with app.run_test() as pilot:
+        tree = app.query_one(SuiteTree)
 
-    ui_node = MagicMock()
-    ui_node.data = suite_path
-    placeholder = MagicMock()
-    placeholder.label = Text("loading...")
-    ui_node.children = [placeholder]
+        # Wait for suite to appear
+        suite_ui_node = None
+        for _ in range(50):
+            for child in tree.root.children:
+                if child.data == f"/{suite_name}":
+                    suite_ui_node = child
+                    break
+            if suite_ui_node:
+                break
+            await pilot.pause(0.1)
 
-    with (
-        patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop,
-        patch.object(SuiteTree, "_load_children_worker") as mock_worker,
-    ):
-        mock_app = MagicMock()
-        mock_app_prop.return_value = mock_app
-        tree._load_children(ui_node)
+        assert suite_ui_node is not None
 
-        # placeholder.remove is now called via call_from_thread
-        mock_app.call_from_thread.assert_any_call(placeholder.remove)
-        mock_worker.assert_called_with(ui_node, suite_path)
+        # Expand node to trigger lazy loading
+        suite_ui_node.expand()
 
+        # Wait for children to load
+        for _ in range(50):
+            if any(c.data == f"/{suite_name}/task1" for c in suite_ui_node.children):
+                break
+            await pilot.pause(0.1)
 
-def test_load_children_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None:
-    """
-    Test that the worker correctly schedules node additions.
-
-    Args:
-        test_setup: Fixture providing test data.
-    """
-    names, real_defs = test_setup
-
-    # Add more children to the second suite to test multi-node batching
-    suite2 = real_defs.find_suite(names[1])
-    suite2.add_task("t2b")
-    suite2.add_task("t2c")
-
-    tree = SuiteTree("Test")
-    tree.defs = real_defs
-
-    suite_path = f"/{names[1]}"
-    ui_node = MagicMock()
-    ui_node.data = suite_path
-
-    with (
-        patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop,
-        patch.object(SuiteTree, "_add_nodes_batch"),
-    ):
-        mock_app = MagicMock()
-        # Mock _thread_id to simulate being on a different thread
-        mock_app._thread_id = -1
-        mock_app_prop.return_value = mock_app
-
-        tree._load_children_worker(ui_node, suite_path)
-
-        # Should have called call_from_thread with _add_nodes_batch
-        mock_app.call_from_thread.assert_called_once()
-        args, _ = mock_app.call_from_thread.call_args
-        assert args[0] == tree._add_nodes_batch
-        assert args[1] == ui_node
-        # Should have 3 children: t2a, t2b, t2c
-        assert len(args[2]) == 3
-        child_names = [c.name for c in args[2]]
-        assert "t2a" in child_names
-        assert "t2b" in child_names
-        assert "t2c" in child_names
+        assert any(c.data == f"/{suite_name}/task1" for c in suite_ui_node.children)
 
 
 @pytest.mark.asyncio
@@ -351,29 +328,3 @@ def test_action_cycle_filter() -> None:
         tree.action_cycle_filter()
         assert tree.current_filter is None
         mock_app.notify.assert_called_with("Filter: All")
-
-
-def test_populate_tree_worker(test_setup: tuple[list[str], ecflow.Defs]) -> None:
-    """
-    Test the background worker for tree population.
-
-    Args:
-        test_setup: Fixture providing test data.
-    """
-    names, real_defs = test_setup
-    tree = SuiteTree("Test")
-    tree.defs = real_defs
-    tree.root = MagicMock()
-
-    with patch.object(tree, "_should_show_node", return_value=True), patch.object(tree, "_safe_call") as mock_safe:
-        tree._populate_tree_worker()
-        # Should be at least 1 call to _add_nodes_batch
-        assert mock_safe.call_count >= 1
-        args, _ = mock_safe.call_args
-        assert args[0] == tree._add_nodes_batch
-        assert args[1] == tree.root
-
-        # Verify our suites are in the batch (they might be among others)
-        batch_suites = [s.name for s in args[2]]
-        assert names[0] in batch_suites
-        assert names[1] in batch_suites

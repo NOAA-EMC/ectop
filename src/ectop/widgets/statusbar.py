@@ -45,12 +45,9 @@ class StatusBar(Static):
         """
         Initialize the StatusBar.
 
-        Parameters
-        ----------
-        *args : Any
-            Positional arguments for the Static widget.
-        **kwargs : Any
-            Keyword arguments for the Static widget.
+        Args:
+            *args: Positional arguments for the Static widget.
+            **kwargs: Keyword arguments for the Static widget.
         """
         super().__init__(*args, **kwargs)
 
@@ -58,16 +55,11 @@ class StatusBar(Static):
         """
         Update the status bar information.
 
-        Parameters
-        ----------
-        host : str
-            The ecFlow server hostname.
-        port : int
-            The ecFlow server port.
-        status : str, optional
-            The server status message, by default "Connected".
-        version : str, optional
-            The ecFlow server version, by default "Unknown".
+        Args:
+            host: The ecFlow server hostname.
+            port: The ecFlow server port.
+            status: The server status message. Defaults to "Connected".
+            version: The ecFlow server version. Defaults to "Unknown".
         """
         self.server_info = f"{host}:{port}"
         self.status = str(status)
@@ -78,9 +70,7 @@ class StatusBar(Static):
         """
         Render the status bar.
 
-        Returns
-        -------
-        Text
+        Returns:
             The rendered status bar content.
         """
         status_color = "red"
