@@ -20,20 +20,13 @@ def safe_call_app(app: Any, callback: Callable[..., Any], *args: Any, **kwargs: 
     """
     Safely call a function from the app's loop, checking if we are already in the main thread.
 
-    Parameters
-    ----------
-    app : Any
-        The Textual App instance.
-    callback : Callable[..., Any]
-        The function to call.
-    *args : Any
-        Positional arguments for the callback.
-    **kwargs : Any
-        Keyword arguments for the callback.
+    Args:
+        app: The Textual App instance.
+        callback: The function to call.
+        *args: Positional arguments for the callback.
+        **kwargs: Keyword arguments for the callback.
 
-    Returns
-    -------
-    Any
+    Returns:
         The result of the callback if called synchronously, or the return value
         of `app.call_from_thread` if scheduled.
     """

@@ -52,18 +52,12 @@ class DepData:
     """
     Intermediate data structure for dependency information.
 
-    Attributes
-    ----------
-    label : str
-        The text to display for this dependency.
-    path : str | None
-        The ecFlow path if this represents a node, otherwise None.
-    is_met : bool
-        Whether this dependency is currently satisfied.
-    children : list[DepData]
-        Nested dependencies.
-    icon : str | None
-        Optional icon override.
+    Attributes:
+        label: The text to display for this dependency.
+        path: The ecFlow path if this represents a node, otherwise None.
+        is_met: Whether this dependency is currently satisfied.
+        children: Nested dependencies.
+        icon: Optional icon override.
     """
 
     label: str
@@ -90,16 +84,9 @@ class WhyInspector(ModalScreen[None]):
         """
         Initialize the WhyInspector.
 
-        Parameters
-        ----------
-        node_path : str
-            The absolute path to the ecFlow node.
-        client : EcflowClient
-            The ecFlow client instance.
-
-        Returns
-        -------
-        None
+        Args:
+            node_path: The absolute path to the ecFlow node.
+            client: The ecFlow client instance.
         """
         super().__init__()
         self.node_path: str = node_path
@@ -117,9 +104,7 @@ class WhyInspector(ModalScreen[None]):
         """
         Compose the modal UI.
 
-        Returns
-        -------
-        ComposeResult
+        Returns:
             The UI components for the modal.
         """
         with Vertical(id="why_container"):
@@ -131,20 +116,12 @@ class WhyInspector(ModalScreen[None]):
     def on_mount(self) -> None:
         """
         Handle the mount event to initialize the dependency tree.
-
-        Returns
-        -------
-        None
         """
         self.refresh_deps()
 
     def action_close(self) -> None:
         """
         Close the modal.
-
-        Returns
-        -------
-        None
         """
         self.app.pop_screen()
 
@@ -152,14 +129,8 @@ class WhyInspector(ModalScreen[None]):
         """
         Handle button press events.
 
-        Parameters
-        ----------
-        event : Button.Pressed
-            The button press event.
-
-        Returns
-        -------
-        None
+        Args:
+            event: The button press event.
         """
         if event.button.id == "close_btn":
             self.app.pop_screen()
@@ -168,14 +139,8 @@ class WhyInspector(ModalScreen[None]):
         """
         Jump to the selected dependency node in the main tree.
 
-        Parameters
-        ----------
-        event : Tree.NodeSelected[str]
-            The tree node selection event.
-
-        Returns
-        -------
-        None
+        Args:
+            event: The tree node selection event.
         """
         node_path = event.node.data
         if node_path:
@@ -192,10 +157,6 @@ class WhyInspector(ModalScreen[None]):
     def refresh_deps(self) -> None:
         """
         Fetch dependencies from the server and rebuild the tree.
-
-        Returns
-        -------
-        None
         """
         self._refresh_deps_worker()
 
@@ -204,13 +165,8 @@ class WhyInspector(ModalScreen[None]):
         """
         Worker to fetch dependencies from the server and rebuild the tree.
 
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This is a background thread worker.
+        Notes:
+            This is a background thread worker.
         """
         self._refresh_deps_logic()
 
@@ -218,14 +174,8 @@ class WhyInspector(ModalScreen[None]):
         """
         The actual logic for fetching dependencies and updating the UI tree.
 
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        RuntimeError
-            If server synchronization fails.
+        Raises:
+            RuntimeError: If server synchronization fails.
         """
         tree = self.query_one("#dep_tree", Tree)
         try:
@@ -255,16 +205,11 @@ class WhyInspector(ModalScreen[None]):
         """
         Gather dependency data from an ecFlow node.
 
-        Parameters
-        ----------
-        node : Node
-            The ecFlow node to inspect.
-        defs : Defs
-            The ecFlow definitions for node lookups.
+        Args:
+            node: The ecFlow node to inspect.
+            defs: The ecFlow definitions for node lookups.
 
-        Returns
-        -------
-        DepData
+        Returns:
             The root dependency data object.
         """
         root = DepData("Dependencies")
@@ -370,18 +315,12 @@ class WhyInspector(ModalScreen[None]):
         """
         Parse an ecFlow expression and populate DepData objects.
 
-        Parameters
-        ----------
-        parent : DepData
-            The parent DepData object.
-        expr_str : str
-            The expression string to parse.
-        defs : Defs
-            The ecFlow definitions for node lookups.
+        Args:
+            parent: The parent DepData object.
+            expr_str: The expression string to parse.
+            defs: The ecFlow definitions for node lookups.
 
-        Returns
-        -------
-        bool
+        Returns:
             True if the expression is currently met.
         """
         try:
@@ -395,18 +334,12 @@ class WhyInspector(ModalScreen[None]):
         """
         Evaluate a parsed expression tree against ecFlow definitions.
 
-        Parameters
-        ----------
-        parent : DepData
-            The parent DepData object.
-        tree : dict
-            The parsed expression tree.
-        defs : Defs
-            The ecFlow definitions for node lookups.
+        Args:
+            parent: The parent DepData object.
+            tree: The parsed expression tree.
+            defs: The ecFlow definitions for node lookups.
 
-        Returns
-        -------
-        bool
+        Returns:
             True if the expression is currently met.
         """
         expr_type = tree["type"]
@@ -486,16 +419,9 @@ class WhyInspector(ModalScreen[None]):
         """
         Update the tree UI from DepData.
 
-        Parameters
-        ----------
-        tree : Tree
-            The tree widget.
-        data : DepData
-            The root dependency data.
-
-        Returns
-        -------
-        None
+        Args:
+            tree: The tree widget.
+            data: The root dependency data.
         """
         tree.clear()
         tree.root.label = data.label
@@ -507,16 +433,9 @@ class WhyInspector(ModalScreen[None]):
         """
         Recursively add DepData to the Textual Tree.
 
-        Parameters
-        ----------
-        parent_node : TreeNode[str]
-            The parent TreeNode.
-        data : DepData
-            The DepData to add.
-
-        Returns
-        -------
-        None
+        Args:
+            parent_node: The parent TreeNode.
+            data: The DepData to add.
         """
         icon = data.icon or (ICON_MET if data.is_met else ICON_NOT_MET)
         label = f"{icon} {data.label}"
@@ -530,14 +449,10 @@ def _get_expr_tree(expr_str: str) -> dict:
     """
     Parse an ecFlow expression string into a tree structure. Cached for performance.
 
-    Parameters
-    ----------
-    expr_str : str
-        The expression string to parse.
+    Args:
+        expr_str: The expression string to parse.
 
-    Returns
-    -------
-    dict
+    Returns:
         A dictionary representing the expression tree.
     """
     expr_str = expr_str.strip()
