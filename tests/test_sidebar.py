@@ -223,50 +223,51 @@ async def test_select_by_path_integrated(ecflow_server: str) -> None:
         assert current_ui_node.data == task_path
 
 
-def test_find_and_select_caching(test_setup: tuple[list[str], ecflow.Defs]) -> None:
+@pytest.mark.asyncio
+async def test_find_and_select_integrated(ecflow_server: str, unique_suite_names: Callable[[int], list[str]]) -> None:
     """
-    Test that find_and_select uses the path cache.
+    Test that find_and_select correctly finds and selects a node in a live app.
 
     Args:
-        test_setup: Fixture providing test data.
+        ecflow_server: The host:port of the live ecFlow server.
+        unique_suite_names: Fixture to generate unique suite names.
     """
-    names, real_defs = test_setup
-    tree = SuiteTree("Test")
-    tree.defs = real_defs
+    from ectop.app import Ectop
 
-    task_path = f"/{names[1]}/t2a"
+    host, port = ecflow_server.split(":")
+    client = ecflow.Client(host, int(port))
 
-    with patch.object(SuiteTree, "app", new_callable=PropertyMock) as mock_app_prop:
-        mock_app = MagicMock()
-        mock_app_prop.return_value = mock_app
-        tree.root = MagicMock()
+    suite_name = unique_suite_names(1)[0]
+    task_name = "target_task"
+    defs = ecflow.Defs()
+    suite = defs.add_suite(suite_name)
+    suite.add_task(task_name)
+    client.load(defs, force=True)
 
-        with (
-            patch.object(SuiteTree, "cursor_node", new=None),
-            patch.object(SuiteTree, "_select_by_path_logic") as mock_select_logic,
-            patch.object(SuiteTree, "_add_node_to_ui"),
-        ):
-            # Manually trigger cache build for logic test
-            tree._build_caches_and_populate()
+    app = Ectop(host=host, port=int(port))
+    async with app.run_test() as pilot:
+        tree = app.query_one(SuiteTree)
 
-            tree._find_and_select_logic("t2a")
-            assert tree._all_paths_cache is not None
-            # Check if ANY path in all_paths_cache matches our expectation
-            matching_paths = [p for p in tree._all_paths_cache if p.endswith("/t2a")]
-            assert task_path in matching_paths
-            # mock_select_logic should be called with some path that matched
-            assert mock_select_logic.called
-            called_path = mock_select_logic.call_args[0][0]
-            assert called_path.endswith("/t2a")
+        # Wait for tree to populate
+        for _ in range(50):
+            if tree.defs is not None and tree._all_paths_cache:
+                break
+            await pilot.pause(0.1)
 
-            # Update defs - cache should persist until update_tree is called
-            mock_select_logic.reset_mock()
-            tree._find_and_select_logic("t2a")
-            assert mock_select_logic.called
+        # Trigger search
+        await pilot.press("/")
+        await pilot.press(*task_name)
+        await pilot.press("enter")
 
-            # update_tree should clear cache
-            tree.update_tree("localhost", 3141, None)
-            assert tree._all_paths_cache is None
+        # Wait for selection to update
+        # find_and_select runs in a worker
+        for _ in range(50):
+            if tree.cursor_node and tree.cursor_node.data == f"/{suite_name}/{task_name}":
+                break
+            await pilot.pause(0.1)
+
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == f"/{suite_name}/{task_name}"
 
 
 def test_should_show_node(test_setup: tuple[list[str], ecflow.Defs]) -> None:
