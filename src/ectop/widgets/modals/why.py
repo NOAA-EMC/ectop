@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import ecflow
 from textual import work
@@ -325,19 +325,25 @@ class WhyInspector(ModalScreen[None]):
         """
         try:
             tree = _get_expr_tree(expr_str)
-            return self._evaluate_expr_tree(parent, tree, defs)
+            state_map: dict[str, Any] = {}
+            if defs:
+                # Build a full path-to-state map for robustness.
+                # This is more reliable than find_abs_node in all versions.
+                for n in defs.get_all_nodes():
+                    state_map[n.get_abs_node_path()] = n.get_state()
+            return self._evaluate_expr_tree(parent, tree, state_map)
         except Exception as e:
             parent.children.append(DepData(f"Parse Error: {expr_str} ({e})", is_met=False, icon=ICON_NOT_MET))
             return False
 
-    def _evaluate_expr_tree(self, parent: DepData, tree: dict, defs: Defs) -> bool:
+    def _evaluate_expr_tree(self, parent: DepData, tree: dict, state_map: dict[str, Any]) -> bool:
         """
-        Evaluate a parsed expression tree against ecFlow definitions.
+        Evaluate a parsed expression tree against a pre-gathered state map.
 
         Args:
             parent: The parent DepData object.
             tree: The parsed expression tree.
-            defs: The ecFlow definitions for node lookups.
+            state_map: A mapping of node paths to their current states.
 
         Returns:
             True if the expression is currently met.
@@ -349,7 +355,7 @@ class WhyInspector(ModalScreen[None]):
 
         if expr_type == "not":
             not_node = DepData("NOT (Must be false)")
-            inner_met = self._evaluate_expr_tree(not_node, tree["child"], defs)
+            inner_met = self._evaluate_expr_tree(not_node, tree["child"], state_map)
             is_met = not inner_met
             not_node.is_met = is_met
             parent.children.append(not_node)
@@ -358,8 +364,8 @@ class WhyInspector(ModalScreen[None]):
         if expr_type in ("and", "or"):
             label = EXPR_AND_LABEL if expr_type == "and" else EXPR_OR_LABEL
             op_node = DepData(label)
-            is_met_left = self._evaluate_expr_tree(op_node, tree["left"], defs)
-            is_met_right = self._evaluate_expr_tree(op_node, tree["right"], defs)
+            is_met_left = self._evaluate_expr_tree(op_node, tree["left"], state_map)
+            is_met_right = self._evaluate_expr_tree(op_node, tree["right"], state_map)
             is_met = (is_met_left and is_met_right) if expr_type == "and" else (is_met_left or is_met_right)
             op_node.is_met = is_met
             parent.children.append(op_node)
@@ -370,12 +376,11 @@ class WhyInspector(ModalScreen[None]):
             path = tree["path"]
             op = tree["op"]
             expected_state_str = tree["expected"]
-            target_node = defs.find_abs_node(path)
 
-            if target_node is not None:
-                actual_state = target_node.get_state()
+            if path in state_map:
+                actual_state = state_map[path]
 
-                # For tests where get_state might return a string mock
+                # For tests where actual_state might be a string
                 if isinstance(actual_state, str):
                     expected_state = expected_state_str
                 else:
