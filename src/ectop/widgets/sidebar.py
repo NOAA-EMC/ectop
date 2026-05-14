@@ -117,6 +117,9 @@ class SuiteTree(Tree[str]):
 
         Args:
             new_defs: The new ecFlow definitions.
+
+        Returns:
+            None
         """
         self._rebuild_tree()
 
@@ -126,6 +129,9 @@ class SuiteTree(Tree[str]):
 
         Args:
             new_filter: The new filter value.
+
+        Returns:
+            None
         """
         self._rebuild_tree()
 
@@ -135,12 +141,18 @@ class SuiteTree(Tree[str]):
 
         Args:
             focus_mode: The new focus mode value.
+
+        Returns:
+            None
         """
         self._rebuild_tree()
 
     def _rebuild_tree(self) -> None:
         """
         Rebuild the tree from ecFlow definitions using lazy loading.
+
+        Returns:
+            None
 
         Notes:
             This method captures the current selection path to restore it
@@ -176,6 +188,14 @@ class SuiteTree(Tree[str]):
     def _build_caches_and_populate(self) -> None:
         """
         Build search and visibility caches in background and then populate root.
+
+        Returns:
+            None
+
+        Notes:
+            This is a background worker that builds the visibility and search
+            caches using a single-pass traversal of the ecFlow definitions.
+            It is thread-safe and offloads CPU-intensive work from the UI thread.
         """
         if not self.defs:
             return
@@ -253,6 +273,9 @@ class SuiteTree(Tree[str]):
     def _populate_root(self) -> None:
         """
         Populate the tree root with suites.
+
+        Returns:
+            None
         """
         self._populate_tree_worker()
 
@@ -260,6 +283,9 @@ class SuiteTree(Tree[str]):
     def _populate_tree_worker(self) -> None:
         """
         Worker to populate the tree root with suites in a background thread.
+
+        Returns:
+            None
 
         Notes:
             This is a background worker that performs recursive filtering.
@@ -286,6 +312,9 @@ class SuiteTree(Tree[str]):
         Args:
             parent_ui_node: The parent UI node.
             node_dtos: List of NodeDTO objects to add.
+
+        Returns:
+            None
         """
         for dto in node_dtos:
             self._add_node_to_ui(parent_ui_node, dto)
@@ -301,11 +330,15 @@ class SuiteTree(Tree[str]):
             The corresponding NodeDTO.
         """
         has_children = False
-        is_container = isinstance(node, ecflow.Family | ecflow.Suite)
-        if is_container and hasattr(node, "nodes"):
+        is_container = isinstance(node, ecflow.Suite | ecflow.Family)
+        if is_container:
             try:
-                next(iter(node.nodes))
-                has_children = True
+                # Optimized check: check if nodes iterator is non-empty
+                # Note: ecFlow nodes iterator might not support bool() or direct any()
+                # in all environments, so we use a standard iterator check.
+                for _ in node.nodes:
+                    has_children = True
+                    break
             except (StopIteration, RuntimeError):
                 pass
 
@@ -339,7 +372,7 @@ class SuiteTree(Tree[str]):
             state = str(node.get_state())
             if state == self.current_filter:
                 return True
-            if hasattr(node, "nodes") and node.nodes:
+            if isinstance(node, ecflow.Suite | ecflow.Family):
                 return any(self._should_show_node(child) for child in node.nodes)
             return False
 
@@ -348,6 +381,9 @@ class SuiteTree(Tree[str]):
     def action_cycle_filter(self) -> None:
         """
         Cycle through available status filters and refresh the tree.
+
+        Returns:
+            None
         """
         current_idx = self.filters.index(self.current_filter)
         next_idx = (current_idx + 1) % len(self.filters)
@@ -358,6 +394,9 @@ class SuiteTree(Tree[str]):
     def action_toggle_focus(self) -> None:
         """
         Toggle Focus Mode and refresh the tree.
+
+        Returns:
+            None
         """
         self.focus_mode = not self.focus_mode
         state = "ON" if self.focus_mode else "OFF"
@@ -398,6 +437,9 @@ class SuiteTree(Tree[str]):
 
         Args:
             event: The expansion event.
+
+        Returns:
+            None
         """
         node = event.node
         self._load_children(node)
@@ -409,6 +451,9 @@ class SuiteTree(Tree[str]):
         Args:
             ui_node: The UI node to load children for.
             sync: Whether to load children synchronously. Defaults to False.
+
+        Returns:
+            None
 
         Notes:
             Uses `_load_children_worker` for async loading.
@@ -424,7 +469,7 @@ class SuiteTree(Tree[str]):
 
             if sync:
                 ecflow_node = self.defs.find_abs_node(ui_node.data)
-                if ecflow_node and hasattr(ecflow_node, "nodes"):
+                if ecflow_node and isinstance(ecflow_node, ecflow.Suite | ecflow.Family):
                     # Use batching even for sync loading to keep implementation consistent
                     nodes = list(ecflow_node.nodes)
                     dtos = [self._to_dto(n) for n in nodes]
@@ -441,6 +486,9 @@ class SuiteTree(Tree[str]):
             ui_node: The UI node to populate.
             node_path: The absolute path of the ecFlow node.
 
+        Returns:
+            None
+
         Notes:
             UI updates are scheduled back to the main thread using `call_from_thread`.
         """
@@ -448,7 +496,7 @@ class SuiteTree(Tree[str]):
             return
 
         ecflow_node = self.defs.find_abs_node(node_path)
-        if ecflow_node and hasattr(ecflow_node, "nodes"):
+        if ecflow_node and isinstance(ecflow_node, ecflow.Suite | ecflow.Family):
             children = [c for c in cast("list[ecflow.Node]", ecflow_node.nodes) if self._should_show_node(c)]
             batch_size = 50
             for i in range(0, len(children), batch_size):
@@ -467,6 +515,9 @@ class SuiteTree(Tree[str]):
         Args:
             query: The search query.
 
+        Returns:
+            None
+
         Notes:
             This is a background worker.
         """
@@ -478,6 +529,9 @@ class SuiteTree(Tree[str]):
 
         Args:
             query: The search query.
+
+        Returns:
+            None
         """
         if not self.defs:
             return
@@ -548,6 +602,9 @@ class SuiteTree(Tree[str]):
         Args:
             path: The absolute path of the node to select.
 
+        Returns:
+            None
+
         Notes:
             This is a background worker to avoid blocking the UI thread when
             loading many nested nodes synchronously.
@@ -560,6 +617,9 @@ class SuiteTree(Tree[str]):
 
         Args:
             path: The absolute path of the node to select.
+
+        Returns:
+            None
 
         Notes:
             This method should be called from a background thread as it performs
@@ -596,6 +656,9 @@ class SuiteTree(Tree[str]):
 
         Args:
             node: The node to select and reveal.
+
+        Returns:
+            None
         """
         self.select_node(node)
         parent = node.parent

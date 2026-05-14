@@ -27,7 +27,9 @@ def mock_node() -> MagicMock:
     MagicMock
         A mock ecFlow node object.
     """
-    node = MagicMock()
+    import ecflow
+
+    node = MagicMock(spec=ecflow.Family)
     node.get_state.return_value = "active"
     node.nodes = []
     return node
