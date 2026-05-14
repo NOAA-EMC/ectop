@@ -8,7 +8,7 @@ Performance tests for SuiteTree to verify node addition batching.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -18,8 +18,9 @@ from ectop.widgets.sidebar import SuiteTree
 @pytest.mark.asyncio
 async def test_load_children_worker_batching_integrated(ecflow_server: str) -> None:
     """Test that _load_children_worker batches many children into multiple calls using a real server."""
-    from ectop.app import Ectop
     import ecflow
+
+    from ectop.app import Ectop
 
     host, port = ecflow_server.split(":")
     client = ecflow.Client(host, int(port))

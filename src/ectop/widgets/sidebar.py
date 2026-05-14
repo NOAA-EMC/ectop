@@ -330,7 +330,7 @@ class SuiteTree(Tree[str]):
             The corresponding NodeDTO.
         """
         has_children = False
-        is_container = isinstance(node, (ecflow.Suite, ecflow.Family))
+        is_container = isinstance(node, ecflow.Suite | ecflow.Family)
         if is_container:
             try:
                 # Optimized check: check if nodes iterator is non-empty
@@ -372,7 +372,7 @@ class SuiteTree(Tree[str]):
             state = str(node.get_state())
             if state == self.current_filter:
                 return True
-            if isinstance(node, (ecflow.Suite, ecflow.Family)):
+            if isinstance(node, ecflow.Suite | ecflow.Family):
                 return any(self._should_show_node(child) for child in node.nodes)
             return False
 
@@ -469,7 +469,7 @@ class SuiteTree(Tree[str]):
 
             if sync:
                 ecflow_node = self.defs.find_abs_node(ui_node.data)
-                if ecflow_node and isinstance(ecflow_node, (ecflow.Suite, ecflow.Family)):
+                if ecflow_node and isinstance(ecflow_node, ecflow.Suite | ecflow.Family):
                     # Use batching even for sync loading to keep implementation consistent
                     nodes = list(ecflow_node.nodes)
                     dtos = [self._to_dto(n) for n in nodes]
@@ -496,7 +496,7 @@ class SuiteTree(Tree[str]):
             return
 
         ecflow_node = self.defs.find_abs_node(node_path)
-        if ecflow_node and isinstance(ecflow_node, (ecflow.Suite, ecflow.Family)):
+        if ecflow_node and isinstance(ecflow_node, ecflow.Suite | ecflow.Family):
             children = [c for c in cast("list[ecflow.Node]", ecflow_node.nodes) if self._should_show_node(c)]
             batch_size = 50
             for i in range(0, len(children), batch_size):
