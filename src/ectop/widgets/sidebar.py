@@ -11,9 +11,10 @@ Sidebar widget for the ecFlow suite tree.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any
 
 import ecflow
 from rich.text import Text
@@ -57,6 +58,151 @@ class NodeDTO:
     has_children: bool
 
 
+@dataclass(frozen=True, slots=True)
+class DefinitionNode:
+    """A plain immutable definition-tree node.
+
+    Parameters
+    ----------
+    name : str
+        Node name as returned by ecFlow.
+    path : str
+        Absolute ecFlow node path.
+    state : str
+        String form of the node state.
+    parent_path : str | None
+        Absolute path of the parent, if present.
+    child_paths : tuple[str, ...]
+        Absolute paths of the direct children.
+    node_kind : str
+        One of ``suite``, ``family``, or ``task``.
+    """
+
+    name: str
+    path: str
+    state: str
+    parent_path: str | None
+    child_paths: tuple[str, ...]
+    node_kind: str
+
+    @property
+    def is_container(self) -> bool:
+        """Return whether the node may contain children.
+
+        Returns
+        -------
+        bool
+            Whether this node is a suite or family.
+        """
+        return self.node_kind in {"suite", "family"}
+
+    @property
+    def has_children(self) -> bool:
+        """Return whether this node has direct children.
+
+        Returns
+        -------
+        bool
+            Whether ``child_paths`` is non-empty.
+        """
+        return bool(self.child_paths)
+
+
+@dataclass(frozen=True, slots=True)
+class DefinitionSnapshot:
+    """Immutable indexed view of one ecFlow definitions generation.
+
+    Parameters
+    ----------
+    generation : int
+        Monotonic identifier for the synchronized definitions.
+    nodes : tuple[DefinitionNode, ...]
+        All nodes in hierarchy order.
+    paths : tuple[str, ...]
+        Absolute paths in the same order as ``nodes``.
+    paths_lower : tuple[str, ...]
+        Case-folded paths for search.
+    by_path : Mapping[str, DefinitionNode]
+        Read-only index of nodes by absolute path.
+    visible_by_state : Mapping[str, frozenset[str]]
+        Paths matching each state, including their ancestors.
+    focus_visible_paths : frozenset[str]
+        Non-complete nodes and ancestors required to reach them.
+    """
+
+    generation: int
+    nodes: tuple[DefinitionNode, ...]
+    paths: tuple[str, ...]
+    paths_lower: tuple[str, ...]
+    by_path: Mapping[str, DefinitionNode]
+    visible_by_state: Mapping[str, frozenset[str]]
+    focus_visible_paths: frozenset[str]
+
+    @classmethod
+    def from_defs(cls, defs: Defs | None, generation: int) -> DefinitionSnapshot:
+        """Project ecFlow definitions into immutable plain values.
+
+        Parameters
+        ----------
+        defs : ecflow.Defs | None
+            Definitions returned by the ecFlow client.
+        generation : int
+            Generation to associate with the resulting snapshot.
+
+        Returns
+        -------
+        DefinitionSnapshot
+            Indexed nodes and status visibility for the definitions.
+        """
+        records: list[DefinitionNode] = []
+        if defs:
+            suites = list(defs.suites)
+            stack: list[tuple[ecflow.Node, str | None]] = [(suite, None) for suite in reversed(suites)]
+            while stack:
+                node, parent_path = stack.pop()
+                is_suite = isinstance(node, ecflow.Suite)
+                is_family = isinstance(node, ecflow.Family)
+                children = tuple(node.nodes) if is_suite or is_family else ()
+                path = node.get_abs_node_path()
+                node_kind = "suite" if is_suite else "family" if is_family else "task"
+                records.append(
+                    DefinitionNode(
+                        name=node.name(),
+                        path=path,
+                        state=str(node.get_state()),
+                        parent_path=parent_path,
+                        child_paths=tuple(child.get_abs_node_path() for child in children),
+                        node_kind=node_kind,
+                    )
+                )
+                stack.extend((child, path) for child in reversed(children))
+
+        paths = tuple(record.path for record in records)
+        by_path = {record.path: record for record in records}
+        states = {record.state for record in records}
+        visible: dict[str, set[str]] = {state: set() for state in states}
+        focus_visible: set[str] = set()
+        for record in reversed(records):
+            if record.state in visible:
+                visible[record.state].add(record.path)
+            if record.state != "complete" or any(child in focus_visible for child in record.child_paths):
+                focus_visible.add(record.path)
+            if record.parent_path:
+                for _state, visible_paths in visible.items():
+                    if record.path in visible_paths:
+                        visible_paths.add(record.parent_path)
+
+        return cls(
+            generation=generation,
+            nodes=tuple(records),
+            paths=paths,
+            paths_lower=tuple(path.casefold() for path in paths),
+            by_path=MappingProxyType(by_path),
+            visible_by_state=MappingProxyType({state: frozenset(paths) for state, paths in visible.items()}),
+            focus_visible_paths=frozenset(focus_visible),
+        )
+
+
 class SuiteTree(Tree[str]):
     """
     A tree widget to display ecFlow suites and nodes.
@@ -94,6 +240,12 @@ class SuiteTree(Tree[str]):
         self._visibility_cache: dict[str, set[str]] = {}
         self._search_paths_lower: list[str] = []
         self._last_selected_path: str | None = None
+        self.snapshot: DefinitionSnapshot | None = None
+        self._definition_generation = 0
+        self._search_generation = 0
+        self._pending_search: tuple[int, str] | None = None
+        self._loaded_paths: set[str] = set()
+        self._updating_tree = False
 
     def update_tree(self, client_host: str, client_port: int, defs: Defs | None) -> None:
         """
@@ -109,7 +261,16 @@ class SuiteTree(Tree[str]):
         """
         self.host = client_host
         self.port = client_port
-        self.defs = defs
+        self._definition_generation += 1
+        self._search_generation += 1
+        self._pending_search = None
+        self.snapshot = None
+        self._updating_tree = True
+        try:
+            self.defs = defs
+        finally:
+            self._updating_tree = False
+        self._rebuild_tree()
 
     def watch_defs(self, new_defs: Defs | None) -> None:
         """
@@ -121,7 +282,12 @@ class SuiteTree(Tree[str]):
         Returns:
             None
         """
-        self._rebuild_tree()
+        if not self._updating_tree:
+            self._definition_generation += 1
+            self._search_generation += 1
+            self._pending_search = None
+            self.snapshot = None
+            self._rebuild_tree()
 
     def watch_current_filter(self, new_filter: str | None) -> None:
         """
@@ -170,7 +336,10 @@ class SuiteTree(Tree[str]):
             self._last_selected_path = None
 
         self.clear()
+        self.root.expand()
+        self._loaded_paths.clear()
         if not self.defs:
+            self.snapshot = None
             self.root.label = "Server Empty"
             self._all_paths_cache = None
             self._visibility_cache = {}
@@ -181,129 +350,153 @@ class SuiteTree(Tree[str]):
         focus_str = " [Focus]" if self.focus_mode else ""
         self.root.label = f"{ICON_SERVER} {self.host}:{self.port}{filter_str}{focus_str}"
 
-        # Combine cache building and population triggering
-        self._build_caches_and_populate()
+        if self.snapshot and self.snapshot.generation == self._definition_generation:
+            self._populate_snapshot_roots()
+        else:
+            self._build_caches_and_populate()
 
-    @work(exclusive=True, thread=True)
     def _build_caches_and_populate(self) -> None:
-        """
-        Build search and visibility caches in background and then populate root.
+        """Build a snapshot off-thread while attached to a running app.
 
-        Returns:
-            None
-
-        Notes:
-            This is a background worker that builds the visibility and search
-            caches using a single-pass traversal of the ecFlow definitions.
-            It is thread-safe and offloads CPU-intensive work from the UI thread.
+        Returns
+        -------
+        None
+            Snapshot creation is scheduled or completed for a detached tree.
         """
-        if not self.defs:
+        defs = self.defs
+        generation = self._definition_generation
+        if defs is None:
             return
-
-        all_paths: list[str] = []
-        # Pre-calculate visibility for all filters to avoid re-calculation on filter cycle
-        visibility: dict[str, set[str]] = {f: set() for f in self.filters if f is not None}
-
-        # Optimized single-pass traversal using get_all_nodes()
-        # and post-order visibility propagation.
         try:
-            # get_all_nodes() returns all nodes in the definitions
-            # If it's a mock, it might not have get_all_nodes or it might return a list
-            all_nodes_raw = self.defs.get_all_nodes()
-            all_nodes = list(all_nodes_raw)
+            app_is_running = self.is_attached and self.app.is_running
+        except (AttributeError, RuntimeError):
+            app_is_running = False
+        if app_is_running:
+            self._build_snapshot_worker(defs, generation)
+        else:
+            self._install_snapshot(DefinitionSnapshot.from_defs(defs, generation))
 
-            # For visibility propagation, we need to go from leaves to root.
-            # get_all_nodes() usually returns in pre-order.
-            # We reverse it for a post-order effect.
-            for node in reversed(all_nodes):
-                path = node.get_abs_node_path()
-                all_paths.append(path)
+    @work(group="tree-build", exclusive=True, thread=True)
+    def _build_snapshot_worker(self, defs: Defs, generation: int) -> None:
+        """Build plain node data and deliver it to the UI thread.
 
-                state = str(node.get_state())
-                if state in visibility:
-                    visibility[state].add(path)
+        Parameters
+        ----------
+        defs : ecflow.Defs
+            Definitions captured by the UI thread.
+        generation : int
+            Generation assigned to these definitions.
 
-                # If this node matches a filter, its parent should also be visible for that filter.
-                # Since we are going in reverse (leaves to root), parents will be processed after children.
-                parent = node.get_parent()
-                if parent:
-                    parent_path = parent.get_abs_node_path()
-                    # Propagation: if any child is visible for a filter, parent is visible too.
-                    # We check all filters.
-                    for f in visibility:
-                        if path in visibility[f]:
-                            visibility[f].add(parent_path)
+        Returns
+        -------
+        None
+            A current snapshot is published to the tree.
+        """
+        try:
+            snapshot = DefinitionSnapshot.from_defs(defs, generation)
+        except RuntimeError as error:
+            self._safe_call(self.app.notify, f"Failed to index ecFlow definitions: {error}", severity="error")
+            return
+        self._safe_call(self._install_snapshot, snapshot)
 
-            # all_paths was collected in reverse, fix it
-            all_paths.reverse()
+    def _install_snapshot(self, snapshot: DefinitionSnapshot) -> None:
+        """Install the current snapshot and render visible suite roots.
 
-        except Exception:
-            # Fallback to per-suite traversal if get_all_nodes() fails or behavior is unexpected
-            all_paths = []
-            for suite in self.defs.suites:
-                suite_path = suite.get_abs_node_path()
-                all_paths.append(suite_path)
+        Parameters
+        ----------
+        snapshot : DefinitionSnapshot
+            Immutable view built from synchronized definitions.
 
-                # Check suite state for visibility
-                suite_state = str(suite.get_state())
-                if suite_state in visibility:
-                    visibility[suite_state].add(suite_path)
+        Returns
+        -------
+        None
+            Current caches and suite roots are updated on the UI thread.
+        """
+        if snapshot.generation != self._definition_generation:
+            return
+        self.snapshot = snapshot
+        self._all_paths_cache = list(snapshot.paths)
+        self._search_paths_lower = list(snapshot.paths_lower)
+        self._visibility_cache = {state: set(paths) for state, paths in snapshot.visible_by_state.items()}
+        self._populate_snapshot_roots()
+        if self._pending_search and self._pending_search[0] == self._search_generation:
+            generation, query = self._pending_search
+            self._pending_search = None
+            self._start_search(query, generation, snapshot)
 
-                suite_nodes = list(suite.get_all_nodes())
-                for node in suite_nodes:
-                    path = node.get_abs_node_path()
-                    all_paths.append(path)
-                    state = str(node.get_state())
-                    if state in visibility:
-                        curr: ecflow.Node | None = node
-                        while curr:
-                            curr_path = curr.get_abs_node_path()
-                            if curr_path in visibility[state]:
-                                break
-                            visibility[state].add(curr_path)
-                            curr = curr.get_parent()
+    def _visible_paths(self, snapshot: DefinitionSnapshot) -> frozenset[str]:
+        """Return paths visible for the current filter and focus settings.
 
-        self._all_paths_cache = all_paths
-        self._search_paths_lower = [p.lower() for p in all_paths]
-        self._visibility_cache = visibility
+        Parameters
+        ----------
+        snapshot : DefinitionSnapshot
+            Snapshot used to calculate visibility.
 
-        # Now that caches are ready, populate the tree root on main thread
-        self._safe_call(self._populate_root)
+        Returns
+        -------
+        frozenset[str]
+            Paths visible in the current tree view.
+        """
+        if self.current_filter is None:
+            visible = frozenset(snapshot.paths)
+        else:
+            visible = snapshot.visible_by_state.get(self.current_filter, frozenset())
+        if self.focus_mode:
+            return visible & snapshot.focus_visible_paths
+        return visible
+
+    def _populate_snapshot_roots(self) -> None:
+        """Render visible suite roots from the current snapshot.
+
+        Returns
+        -------
+        None
+            Suite nodes are added on the UI thread.
+        """
+        snapshot = self.snapshot
+        if snapshot is None:
+            return
+        visible = self._visible_paths(snapshot)
+        self._loaded_paths = {"/"}
+        for record in snapshot.nodes:
+            if record.parent_path is None and record.path in visible:
+                self._add_node_to_ui(self.root, self._record_to_dto(record))
+        if self._last_selected_path:
+            path = self._last_selected_path
+            self._last_selected_path = None
+            if path in visible:
+                self._select_path_from_snapshot(path)
+
+    def _record_to_dto(self, record: DefinitionNode) -> NodeDTO:
+        """Convert an immutable node record to tree-rendering data.
+
+        Parameters
+        ----------
+        record : DefinitionNode
+            Definition record to render.
+
+        Returns
+        -------
+        NodeDTO
+            Display values for one tree node.
+        """
+        return NodeDTO(
+            name=record.name,
+            path=record.path,
+            state=record.state,
+            is_container=record.is_container,
+            has_children=record.has_children,
+        )
 
     def _populate_root(self) -> None:
+        """Render suite roots from the installed snapshot.
+
+        Returns
+        -------
+        None
+            Visible suite nodes are added on the UI thread.
         """
-        Populate the tree root with suites.
-
-        Returns:
-            None
-        """
-        self._populate_tree_worker()
-
-    @work(exclusive=True, thread=True)
-    def _populate_tree_worker(self) -> None:
-        """
-        Worker to populate the tree root with suites in a background thread.
-
-        Returns:
-            None
-
-        Notes:
-            This is a background worker that performs recursive filtering.
-        """
-        if not self.defs:
-            return
-        suites = [s for s in cast("list[ecflow.Suite]", self.defs.suites) if self._should_show_node(s)]
-        batch_size = 50
-        for i in range(0, len(suites), batch_size):
-            batch_nodes = suites[i : i + batch_size]
-            batch_dtos = [self._to_dto(s) for s in batch_nodes]
-            self._safe_call(self._add_nodes_batch, self.root, batch_dtos)
-
-        # Restore selection if we have a saved path
-        if self._last_selected_path:
-            path_to_restore = self._last_selected_path
-            self._last_selected_path = None
-            self._select_by_path_logic(path_to_restore)
+        self._populate_snapshot_roots()
 
     def _add_nodes_batch(self, parent_ui_node: TreeNode[str], node_dtos: list[NodeDTO]) -> None:
         """
@@ -350,33 +543,31 @@ class SuiteTree(Tree[str]):
             has_children=has_children,
         )
 
-    def _should_show_node(self, node: Node) -> bool:
-        """
-        Determine if a node should be shown based on the current filter.
+    def _should_show_node(self, node: Node | DefinitionNode) -> bool:
+        """Check whether a node belongs in the current snapshot view.
 
-        Args:
-            node: The ecFlow node to check.
+        Parameters
+        ----------
+        node : ecflow.Node | DefinitionNode
+            Node whose path should be checked.
 
-        Returns:
-            True if the node or any of its descendants match the filter.
+        Returns
+        -------
+        bool
+            Whether the node is in the indexed visible-path set.
         """
+        snapshot = self.snapshot
+        if snapshot is not None:
+            path = node.path if isinstance(node, DefinitionNode) else node.get_abs_node_path()
+            return path in self._visible_paths(snapshot)
+
+        if isinstance(node, DefinitionNode):
+            return False
         if self.focus_mode and str(node.get_state()) == "complete":
             return False
-
         if self.current_filter is None:
             return True
-
-        visible_paths = self._visibility_cache.get(self.current_filter)
-        if not visible_paths:
-            # Cache not ready or filter unknown, fallback to slow check
-            state = str(node.get_state())
-            if state == self.current_filter:
-                return True
-            if isinstance(node, ecflow.Suite | ecflow.Family):
-                return any(self._should_show_node(child) for child in node.nodes)
-            return False
-
-        return node.get_abs_node_path() in visible_paths
+        return str(node.get_state()) == self.current_filter
 
     def action_cycle_filter(self) -> None:
         """
@@ -458,197 +649,337 @@ class SuiteTree(Tree[str]):
         Notes:
             Uses `_load_children_worker` for async loading.
         """
-        if not ui_node.data or not self.defs:
+        if self.snapshot is None:
+            return
+        self._populate_snapshot_children(ui_node)
+
+    def _populate_snapshot_children(self, ui_node: TreeNode[str], reveal_path: str | None = None) -> None:
+        """Materialize direct children from plain snapshot records.
+
+        Parameters
+        ----------
+        ui_node : TreeNode[str]
+            Parent widget node to populate.
+        reveal_path : str | None, optional
+            Search target whose otherwise filtered ancestors should be included.
+
+        Returns
+        -------
+        None
+            Direct child widgets are created on the UI thread.
+        """
+        snapshot = self.snapshot
+        if snapshot is None:
+            return
+        parent_path = ui_node.data or "/"
+        if parent_path in self._loaded_paths:
             return
 
-        # Check if we have the placeholder
-        if len(ui_node.children) == 1 and str(ui_node.children[0].label) == LOADING_PLACEHOLDER:
-            # UI modification must be scheduled on the main thread
-            placeholder = ui_node.children[0]
-            self._safe_call(placeholder.remove)
+        if ui_node.data:
+            parent = snapshot.by_path.get(ui_node.data)
+            if parent is None:
+                return
+            child_paths = parent.child_paths
+        else:
+            child_paths = tuple(record.path for record in snapshot.nodes if record.parent_path is None)
 
-            if sync:
-                ecflow_node = self.defs.find_abs_node(ui_node.data)
-                if ecflow_node and isinstance(ecflow_node, ecflow.Suite | ecflow.Family):
-                    # Use batching even for sync loading to keep implementation consistent
-                    nodes = list(ecflow_node.nodes)
-                    dtos = [self._to_dto(n) for n in nodes]
-                    self._safe_call(self._add_nodes_batch, ui_node, dtos)
-            else:
-                self._load_children_worker(ui_node, ui_node.data)
+        visible = self._visible_paths(snapshot)
+        for child in list(ui_node.children):
+            child.remove()
+        child_records = []
+        for child_path in child_paths:
+            record = snapshot.by_path[child_path]
+            leads_to_target = reveal_path is not None and (
+                reveal_path == child_path or reveal_path.startswith(child_path.rstrip("/") + "/")
+            )
+            if child_path in visible or leads_to_target:
+                child_records.append(self._record_to_dto(record))
+        for start in range(0, len(child_records), 50):
+            self._add_nodes_batch(ui_node, child_records[start : start + 50])
+        self._loaded_paths.add(parent_path)
 
-    @work(exclusive=True, thread=True)
-    def _load_children_worker(self, ui_node: TreeNode[str], node_path: str) -> None:
+    def invalidate_search(self) -> int:
+        """Invalidate pending search results and return the new generation.
+
+        Returns
+        -------
+        int
+            Generation that supersedes all outstanding searches.
         """
-        Worker to load children nodes in a background thread.
+        self._search_generation += 1
+        self._pending_search = None
+        return self._search_generation
 
-        Args:
-            ui_node: The UI node to populate.
-            node_path: The absolute path of the ecFlow node.
+    def find_and_select(self, query: str) -> int:
+        """Search the current immutable snapshot for a node path.
 
-        Returns:
-            None
+        Parameters
+        ----------
+        query : str
+            Search text to match against absolute node paths.
 
-        Notes:
-            UI updates are scheduled back to the main thread using `call_from_thread`.
+        Returns
+        -------
+        int
+            Generation assigned to this search request.
         """
-        if not self.defs:
+        generation = self.invalidate_search()
+        normalized_query = query.strip()
+        if not normalized_query:
+            return generation
+        snapshot = self.snapshot
+        if snapshot is None:
+            self._pending_search = (generation, normalized_query)
+            return generation
+        self._start_search(normalized_query, generation, snapshot)
+        return generation
+
+    def _start_search(self, query: str, generation: int, snapshot: DefinitionSnapshot) -> None:
+        """Start search work using only the query and immutable snapshot.
+
+        Parameters
+        ----------
+        query : str
+            Query to match.
+        generation : int
+            Current request generation.
+        snapshot : DefinitionSnapshot
+            Immutable source for path matching.
+
+        Returns
+        -------
+        None
+            Work is scheduled or applied synchronously for a detached widget.
+        """
+        cursor_node = self.cursor_node
+        current_path = cursor_node.data if cursor_node else None
+        try:
+            app_is_running = self.is_attached and self.app.is_running
+        except (AttributeError, RuntimeError):
+            app_is_running = False
+        if app_is_running:
+            self._search_snapshot_worker(query, generation, snapshot, current_path)
+        else:
+            result_path = self._find_path(snapshot, query, current_path)
+            self._apply_search_result(generation, snapshot.generation, result_path, query)
+
+    @work(group="node-search", exclusive=True, thread=True)
+    def _search_snapshot_worker(
+        self,
+        query: str,
+        generation: int,
+        snapshot: DefinitionSnapshot,
+        current_path: str | None,
+    ) -> None:
+        """Find a path in immutable worker input and publish the plain result.
+
+        Parameters
+        ----------
+        query : str
+            Search text.
+        generation : int
+            Search request generation.
+        snapshot : DefinitionSnapshot
+            Immutable node index captured by the UI thread.
+        current_path : str | None
+            Selection captured by the UI thread for next-match ordering.
+
+        Returns
+        -------
+        None
+            A path or no-match result is sent to the UI thread.
+        """
+        result_path = self._find_path(snapshot, query, current_path)
+        self._safe_call(self._apply_search_result, generation, snapshot.generation, result_path, query)
+
+    @staticmethod
+    def _find_path(snapshot: DefinitionSnapshot, query: str, current_path: str | None) -> str | None:
+        """Find the next matching path, wrapping around from the selection.
+
+        Parameters
+        ----------
+        snapshot : DefinitionSnapshot
+            Immutable ordered path index.
+        query : str
+            Text to match case-insensitively.
+        current_path : str | None
+            Currently selected path, if any.
+
+        Returns
+        -------
+        str | None
+            Next matching absolute path, or ``None`` when there is no match.
+        """
+        if not snapshot.paths:
+            return None
+        query_lower = query.casefold()
+        start_index = snapshot.paths.index(current_path) + 1 if current_path in snapshot.paths else 0
+        for offset in range(len(snapshot.paths)):
+            index = (start_index + offset) % len(snapshot.paths)
+            if query_lower in snapshot.paths_lower[index]:
+                return snapshot.paths[index]
+        return None
+
+    def _apply_search_result(
+        self,
+        generation: int,
+        definition_generation: int,
+        result_path: str | None,
+        query: str,
+    ) -> None:
+        """Apply a result only while both query and definitions are current.
+
+        Parameters
+        ----------
+        generation : int
+            Search request generation returned by the worker.
+        definition_generation : int
+            Snapshot generation used for matching.
+        result_path : str | None
+            Matching absolute path, if any.
+        query : str
+            Original query used for the result message.
+
+        Returns
+        -------
+        None
+            Current results select a node or report no match.
+        """
+        snapshot = self.snapshot
+        if generation != self._search_generation or snapshot is None:
             return
-
-        ecflow_node = self.defs.find_abs_node(node_path)
-        if ecflow_node and isinstance(ecflow_node, ecflow.Suite | ecflow.Family):
-            children = [c for c in cast("list[ecflow.Node]", ecflow_node.nodes) if self._should_show_node(c)]
-            batch_size = 50
-            for i in range(0, len(children), batch_size):
-                batch_nodes = children[i : i + batch_size]
-                batch_dtos = [self._to_dto(c) for c in batch_nodes]
-                self._safe_call(self._add_nodes_batch, ui_node, batch_dtos)
-
-    @work(exclusive=True, thread=True)
-    def find_and_select(self, query: str) -> None:
-        """
-        Find nodes matching query in the ecFlow definitions and select them.
-
-        This handles searching through unloaded parts of the tree in a
-        background thread to keep the UI responsive.
-
-        Args:
-            query: The search query.
-
-        Returns:
-            None
-
-        Notes:
-            This is a background worker.
-        """
-        self._find_and_select_logic(query)
+        if definition_generation != snapshot.generation:
+            return
+        if result_path is None:
+            self.app.notify(f"No match found for '{query}'", severity="warning")
+            return
+        self._select_path_from_snapshot(result_path)
 
     def _find_and_select_logic(self, query: str) -> None:
-        """
-        The actual search logic split out for testing.
+        """Run a synchronous search for direct UI-thread callers.
 
-        Args:
-            query: The search query.
+        Parameters
+        ----------
+        query : str
+            Search text.
 
-        Returns:
-            None
+        Returns
+        -------
+        None
+            A matching path is selected if the snapshot contains one.
         """
-        if not self.defs:
+        if self.snapshot is None:
             return
-
-        query = query.lower()
-
-        # Build or use cached paths
-        if self._all_paths_cache is None:
-            # Fallback if cache isn't ready yet
-            all_paths: list[str] = []
-            for suite in self.defs.suites:
-                all_paths.append(suite.get_abs_node_path())
-                all_paths.extend(n.get_abs_node_path() for n in suite.get_all_nodes())
-            self._all_paths_cache = all_paths
-            self._search_paths_lower = [p.lower() for p in self._all_paths_cache]
-
-        all_paths = self._all_paths_cache
-        search_paths = self._search_paths_lower
-
-        # Get current cursor state on main thread
-        cursor_node = getattr(self, "cursor_node", None)
+        cursor_node = self.cursor_node
         current_path = cursor_node.data if cursor_node else None
+        result_path = self._find_path(self.snapshot, query, current_path)
+        self._apply_search_result(self._search_generation, self.snapshot.generation, result_path, query)
 
-        start_index = 0
-        if current_path and current_path in all_paths:
-            try:
-                start_index = all_paths.index(current_path) + 1
-            except ValueError:
-                start_index = 0
+    def _select_path_from_snapshot(self, path: str) -> None:
+        """Materialize a path from snapshot records and select it on the UI thread.
 
-        # Search from start_index to end, then wrap around
-        found_path = None
-        for i in range(len(all_paths)):
-            idx = (start_index + i) % len(all_paths)
-            if query in search_paths[idx]:
-                found_path = all_paths[idx]
-                break
+        Parameters
+        ----------
+        path : str
+            Absolute ecFlow path to reveal and select.
 
-        if found_path:
-            self._select_by_path_logic(found_path)
-        else:
-            self._safe_call(self.app.notify, f"No match found for '{query}'", severity="warning")
+        Returns
+        -------
+        None
+            The target node is selected when it belongs to the active snapshot.
+        """
+        snapshot = self.snapshot
+        if snapshot is None or path not in snapshot.by_path:
+            return
+        current_ui_node = self.root
+        current_path = ""
+        for part in path.strip("/").split("/"):
+            current_path += "/" + part
+            if current_path not in self._loaded_paths:
+                self._populate_snapshot_children(current_ui_node, reveal_path=path)
+            current_ui_node = next(
+                (child for child in current_ui_node.children if child.data == current_path),
+                None,
+            )
+            if current_ui_node is None:
+                return
+            current_ui_node.expand()
+        self.refresh(layout=True)
+        self.call_after_refresh(self._select_after_layout, current_ui_node)
+
+    def _select_after_layout(self, node: TreeNode[str]) -> None:
+        """Wait until the target has a rendered tree line before selection.
+
+        Parameters
+        ----------
+        node : TreeNode[str]
+            Materialized target node.
+
+        Returns
+        -------
+        None
+            The node is selected after layout assigns its visible line.
+        """
+        if node._line < 0:
+            self.refresh(layout=True)
+            self.call_after_refresh(self._select_after_layout, node)
+            return
+        self._select_and_reveal(node)
 
     def _safe_call(self, callback: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-        """
-        Safely call a UI-related function from either the main thread or a worker.
+        """Deliver a UI callback on the Textual thread and drop it after shutdown.
 
-        Args:
-            callback: The function to call.
-            *args: Positional arguments.
-            **kwargs: Keyword arguments.
+        Parameters
+        ----------
+        callback : Callable[..., Any]
+            The UI callback to deliver.
+        *args : Any
+            Positional callback arguments.
+        **kwargs : Any
+            Keyword callback arguments.
 
-        Returns:
-            The result of the call if synchronous, or None if scheduled.
+        Returns
+        -------
+        Any
+            The callback result or ``None`` when delivery is unavailable.
         """
         try:
             return safe_call_app(self.app, callback, *args, **kwargs)
-        except (AttributeError, RuntimeError, Exception):
-            # App might not be fully initialized in some tests
-            # Fallback to direct call if app is not available
-            return callback(*args, **kwargs)
+        except (AttributeError, RuntimeError):
+            return None
 
-    @work(thread=True)
     def select_by_path(self, path: str) -> None:
-        """
-        Select a node by its absolute ecFlow path, expanding parents as needed.
+        """Select a node path from the active snapshot.
 
-        Args:
-            path: The absolute path of the node to select.
+        Parameters
+        ----------
+        path : str
+            Absolute ecFlow path to reveal and select.
 
-        Returns:
-            None
-
-        Notes:
-            This is a background worker to avoid blocking the UI thread when
-            loading many nested nodes synchronously.
+        Returns
+        -------
+        None
+            The matching node is selected on the UI thread.
         """
         self._select_by_path_logic(path)
 
     def _select_by_path_logic(self, path: str) -> None:
-        """
-        The actual logic for selecting a node by path.
+        """Select a node path using the UI-owned tree and snapshot.
 
-        Args:
-            path: The absolute path of the node to select.
+        Parameters
+        ----------
+        path : str
+            Absolute ecFlow path to reveal and select.
 
-        Returns:
-            None
-
-        Notes:
-            This method should be called from a background thread as it performs
-            synchronous child loading.
+        Returns
+        -------
+        None
+            The matching node is selected when it exists in the snapshot.
         """
         if path == "/":
-            self.app.call_from_thread(self.select_node, self.root)
-            return
-
-        parts = path.strip("/").split("/")
-        current_ui_node = self.root
-
-        current_path = ""
-        for part in parts:
-            current_path += "/" + part
-            # Load children synchronously within the worker thread
-            self._load_children(current_ui_node, sync=True)
-            self._safe_call(current_ui_node.expand)
-
-            found = False
-            for child in current_ui_node.children:
-                if child.data == current_path:
-                    current_ui_node = child
-                    found = True
-                    break
-            if not found:
-                return
-
-        self._safe_call(self._select_and_reveal, current_ui_node)
+            self.select_node(self.root)
+        else:
+            self._select_path_from_snapshot(path)
 
     def _select_and_reveal(self, node: TreeNode[str]) -> None:
         """

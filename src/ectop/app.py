@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shlex
+import stat
 import tempfile
 from typing import Any
 
@@ -307,6 +309,11 @@ class Ectop(App):
         self.port = port
         self.refresh_interval = refresh_interval
         self.ecflow_client: EcflowClient | None = None
+        self._search_timer: Any | None = None
+        self._node_load_generation = 0
+        self._refresh_in_flight = False
+        self._refresh_pending = False
+        self._refresh_run_count = 0
 
     def compose(self) -> ComposeResult:
         """
@@ -329,6 +336,7 @@ class Ectop(App):
         Handle the mount event to start the application.
         """
         self._initial_connect()
+        self.set_interval(self.refresh_interval, self._automatic_refresh_tick)
         self.set_interval(self.refresh_interval, self._live_log_tick)
 
     def on_tree_node_selected(self, event: SuiteTree.NodeSelected[str]) -> None:
@@ -378,10 +386,47 @@ class Ectop(App):
         """
         tree.root.label = f"[red]{ERROR_CONNECTION_FAILED} (Check Host/Port)[/]"
 
-    @work(exclusive=True)
-    async def action_refresh(self) -> None:
+    def action_refresh(self) -> Any | None:
+        """Schedule a coalesced definitions and server-status refresh.
+
+        Returns
+        -------
+        Any | None
+            The scheduled Textual worker, or ``None`` when a refresh is already
+            running and this request is coalesced into its pending follow-up.
         """
-        Fetch suites from server and rebuild the tree.
+        return self._request_tree_refresh()
+
+    def _automatic_refresh_tick(self) -> None:
+        """Request periodic tree and status refresh independently of logs.
+
+        Returns
+        -------
+        None
+            A refresh worker is scheduled when one is not already active.
+        """
+        self._request_tree_refresh()
+
+    def _request_tree_refresh(self) -> Any | None:
+        """Start one tree refresh or record one coalesced follow-up tick.
+
+        Returns
+        -------
+        Any | None
+            The scheduled worker when a new refresh starts.
+        """
+        if not self.ecflow_client:
+            return None
+        if self._refresh_in_flight:
+            self._refresh_pending = True
+            return None
+        self._refresh_in_flight = True
+        return self._tree_refresh_worker()
+
+    @work(group="tree-refresh", exclusive=False)
+    async def _tree_refresh_worker(self) -> None:
+        """
+        Fetch definitions and server status off the event loop, then publish them.
 
         Returns:
             None
@@ -396,10 +441,7 @@ class Ectop(App):
         if not self.ecflow_client:
             return
 
-        self.notify("Refreshing tree...")
-
-        tree = self.query_one("#suite_tree", SuiteTree)
-        status_bar = self.query_one("#status_bar", StatusBar)
+        self._refresh_run_count += 1
         try:
             await self.ecflow_client.sync_local()
             defs = await self.ecflow_client.get_defs()
@@ -412,14 +454,23 @@ class Ectop(App):
             except RuntimeError:
                 pass
 
+            tree = self.query_one("#suite_tree", SuiteTree)
+            status_bar = self.query_one("#status_bar", StatusBar)
             tree.update_tree(self.ecflow_client.host, self.ecflow_client.port, defs)
             status_bar.update_status(self.ecflow_client.host, self.ecflow_client.port, status=status, version=version)
-            self.notify("Tree Refreshed")
         except RuntimeError as e:
-            status_bar.update_status(self.ecflow_client.host, self.ecflow_client.port, status=STATUS_SYNC_ERROR)
-            self.notify(f"Refresh Error: {e}", severity="error")
+            if self.is_running:
+                status_bar = self.query_one("#status_bar", StatusBar)
+                status_bar.update_status(self.ecflow_client.host, self.ecflow_client.port, status=STATUS_SYNC_ERROR)
+                self.notify(f"Refresh Error: {e}", severity="error")
         except Exception as e:
-            self.notify(f"Unexpected Error: {e}", severity="error")
+            if self.is_running:
+                self.notify(f"Unexpected Error: {e}", severity="error")
+        finally:
+            self._refresh_in_flight = False
+            if self._refresh_pending and self.is_running:
+                self._refresh_pending = False
+                self._request_tree_refresh()
 
     @work
     async def action_restart_server(self) -> None:
@@ -484,19 +535,22 @@ class Ectop(App):
         """
         Fetch Output, Script, and Job files for the selected node.
         """
+        self._node_load_generation += 1
+        generation = self._node_load_generation
         path = self.get_selected_path()
         if not path:
             self.notify("No node selected", severity="warning")
             return
-        self._load_node_worker(path)
+        self._load_node_worker(path, generation)
 
-    @work(exclusive=True)
-    async def _load_node_worker(self, path: str) -> None:
+    @work(group="node-files", exclusive=True)
+    async def _load_node_worker(self, path: str, generation: int) -> None:
         """
         Worker to fetch files for a node in parallel.
 
         Args:
             path: The ecFlow node path.
+            generation: The selected-node request generation.
 
         Returns:
             None
@@ -516,6 +570,8 @@ class Ectop(App):
             await self.ecflow_client.sync_local()
         except RuntimeError:
             pass
+        if generation != self._node_load_generation or self.get_selected_path() != path:
+            return
 
         async def _fetch_file(file_type: str, widget_id: str, update_fn: Any) -> None:
             """
@@ -529,9 +585,12 @@ class Ectop(App):
             try:
                 assert self.ecflow_client is not None
                 content = await self.ecflow_client.file(path, file_type)
+                if generation != self._node_load_generation or self.get_selected_path() != path:
+                    return
                 update_fn(content)
             except RuntimeError:
-                content_area.show_error(widget_id, f"File type '{file_type}' not available.")
+                if generation == self._node_load_generation and self.get_selected_path() == path:
+                    content_area.show_error(widget_id, f"File type '{file_type}' not available.")
 
         async def _fetch_timeline() -> None:
             """
@@ -542,7 +601,8 @@ class Ectop(App):
                 node = tree.defs.find_abs_node(path)
                 if node:
                     timeline_data = await asyncio.to_thread(gather_timeline_data, node)
-                    content_area.update_timeline(timeline_data)
+                    if generation == self._node_load_generation and self.get_selected_path() == path:
+                        content_area.update_timeline(timeline_data)
 
         await asyncio.gather(
             _fetch_file("jobout", "#log_output", content_area.update_log),
@@ -850,6 +910,7 @@ class Ectop(App):
             return
 
         try:
+            source_path = await self.ecflow_client.script_source_path(path)
             content = await self.ecflow_client.file(path, "script")
 
             def _write_temp() -> str:
@@ -859,14 +920,14 @@ class Ectop(App):
 
             temp_path = await asyncio.to_thread(_write_temp)
 
-            await self._run_editor(temp_path, path, content)
+            await self._run_editor(temp_path, path, content, source_path)
 
         except RuntimeError as e:
             self.notify(f"Edit Error: {e}", severity="error")
         except Exception as e:
             self.notify(f"Unexpected Error: {e}", severity="error")
 
-    async def _run_editor(self, temp_path: str, path: str, old_content: str) -> None:
+    async def _run_editor(self, temp_path: str, path: str, old_content: str, source_path: str) -> None:
         """
         Run the editor in a suspended state.
 
@@ -874,6 +935,7 @@ class Ectop(App):
             temp_path: Path to the temporary file.
             path: The ecFlow node path.
             old_content: The original content of the script.
+            source_path: The locally accessible ecFlow ``.ecf`` source path.
 
         Returns:
             None
@@ -887,60 +949,109 @@ class Ectop(App):
         """
         from textual.app import SuspendNotSupported
 
-        editor = os.environ.get("EDITOR", DEFAULT_EDITOR)
+        process: asyncio.subprocess.Process | None = None
         try:
-            with self.suspend():
-                process = await asyncio.create_subprocess_exec(editor, temp_path)
-                await process.wait()
-        except SuspendNotSupported:
-            # Fallback for environments that do not support suspend (e.g., some tests)
-            process = await asyncio.create_subprocess_exec(editor, temp_path)
-            await process.wait()
+            try:
+                editor = shlex.split(os.environ.get("EDITOR", DEFAULT_EDITOR))
+            except ValueError as error:
+                raise RuntimeError("EDITOR has invalid quoting; use a valid command and quoted arguments") from error
+            if not editor:
+                raise RuntimeError("EDITOR is empty; set it to an editor command")
 
-        await self._finish_edit(temp_path, path, old_content)
+            async def _launch_editor() -> asyncio.subprocess.Process:
+                """Start the configured editor without invoking a shell.
 
-    @work
-    async def _finish_edit(self, temp_path: str, path: str, old_content: str) -> None:
-        """
-        Process the edited script and update the server.
+                Returns
+                -------
+                asyncio.subprocess.Process
+                    The running editor process.
+                """
+                try:
+                    return await asyncio.create_subprocess_exec(*editor, temp_path)
+                except OSError as error:
+                    raise RuntimeError(f"Failed to start editor '{editor[0]}': {error}") from error
 
-        Args:
-            temp_path: Path to the temporary file.
-            path: The ecFlow node path.
-            old_content: The original content of the script.
+            try:
+                with self.suspend():
+                    process = await _launch_editor()
+                    return_code = await process.wait()
+            except SuspendNotSupported:
+                process = await _launch_editor()
+                return_code = await process.wait()
 
-        Returns:
-            None
+            if return_code != 0:
+                raise RuntimeError(f"Editor exited with status {return_code}; script was not updated")
 
-        Raises:
-            RuntimeError: If updating the script on the server fails.
-            Exception: For unexpected errors.
-
-        Notes:
-            This is an async background worker.
-        """
-        try:
-            # We can use asyncio.to_thread for reading the file to stay non-blocking
-            def _read_file():
-                with open(temp_path) as f:
-                    return f.read()
-
-            new_content = await asyncio.to_thread(_read_file)
-
-            if await asyncio.to_thread(os.path.exists, temp_path):
-                await asyncio.to_thread(os.unlink, temp_path)
-
-            if new_content != old_content:
-                if self.ecflow_client:
-                    await self.ecflow_client.alter(path, "change", "script", "", new_content)
-                    self.notify("Script updated on server")
-                    self._prompt_requeue(path)
-            else:
+            new_content = await asyncio.to_thread(self._read_text_file, temp_path)
+            if new_content == old_content:
                 self.notify("No changes detected")
-        except RuntimeError as e:
-            self.notify(f"Update Error: {e}", severity="error")
-        except Exception as e:
-            self.notify(f"Unexpected Error: {e}", severity="error")
+                return
+            await asyncio.to_thread(self._replace_script_source, source_path, new_content)
+            self.notify("Script source updated")
+            self._prompt_requeue(path)
+        except asyncio.CancelledError:
+            if process is not None and process.returncode is None:
+                process.terminate()
+                await process.wait()
+            raise
+        finally:
+            try:
+                await asyncio.to_thread(os.unlink, temp_path)
+            except FileNotFoundError:
+                pass
+
+    @staticmethod
+    def _read_text_file(temp_path: str) -> str:
+        """Read a UTF-8 script file.
+
+        Parameters
+        ----------
+        temp_path : str
+            Path to the temporary script.
+
+        Returns
+        -------
+        str
+            The script content.
+        """
+        with open(temp_path, encoding="utf-8") as script_file:
+            return script_file.read()
+
+    @staticmethod
+    def _replace_script_source(source_path: str, content: str) -> None:
+        """Atomically replace a writable ecFlow source script.
+
+        Parameters
+        ----------
+        source_path : str
+            Existing local ``.ecf`` source path resolved from ecFlow variables.
+        content : str
+            Edited UTF-8 source content.
+
+        Raises
+        ------
+        RuntimeError
+            If the source cannot be written or atomically replaced.
+        """
+        temporary_path: str | None = None
+        try:
+            source_stat = os.stat(source_path)
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=os.path.dirname(source_path), prefix=".ectop-edit-", delete=False
+            ) as output:
+                output.write(content)
+                temporary_path = output.name
+            os.chmod(temporary_path, stat.S_IMODE(source_stat.st_mode))
+            os.replace(temporary_path, source_path)
+            temporary_path = None
+        except OSError as error:
+            raise RuntimeError(f"Cannot update ecFlow script source {source_path}: {error}") from error
+        finally:
+            if temporary_path is not None:
+                try:
+                    os.unlink(temporary_path)
+                except FileNotFoundError:
+                    pass
 
     def _prompt_requeue(self, path: str) -> None:
         """
@@ -967,10 +1078,7 @@ class Ectop(App):
             event: The input submission event.
         """
         if event.input.id == "search_box":
-            query = event.value
-            if query:
-                tree = self.query_one("#suite_tree", SuiteTree)
-                tree.find_and_select(query)
+            self._queue_node_search(event.value, immediate=True)
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """
@@ -980,7 +1088,61 @@ class Ectop(App):
             event: The input changed event.
         """
         if event.input.id == "search_box":
-            query = event.value
-            if query:
-                tree = self.query_one("#suite_tree", SuiteTree)
-                tree.find_and_select(query)
+            self._queue_node_search(event.value, immediate=False)
+
+    def on_input_blurred(self, event: Input.Blurred) -> None:
+        """Invalidate pending node searches when the search field loses focus.
+
+        Parameters
+        ----------
+        event : Input.Blurred
+            Input blur event.
+
+        Returns
+        -------
+        None
+            Outstanding search results are invalidated.
+        """
+        if event.input.id == "search_box":
+            self._invalidate_node_search()
+
+    def _queue_node_search(self, query: str, immediate: bool) -> None:
+        """Debounce live search and invalidate superseded requests.
+
+        Parameters
+        ----------
+        query : str
+            Current search field contents.
+        immediate : bool
+            Whether submission should start the worker without a delay.
+
+        Returns
+        -------
+        None
+            A current non-empty query is scheduled for search.
+        """
+        tree = self.query_one("#suite_tree", SuiteTree)
+        self._invalidate_node_search()
+        normalized_query = query.strip()
+        if not normalized_query:
+            return
+        if immediate:
+            tree.find_and_select(normalized_query)
+        else:
+            self._search_timer = self.set_timer(0.12, lambda: tree.find_and_select(normalized_query))
+
+    def _invalidate_node_search(self) -> None:
+        """Stop the debounce timer and invalidate all current search results.
+
+        Returns
+        -------
+        None
+            No pending search may update the tree.
+        """
+        if self._search_timer is not None:
+            self._search_timer.stop()
+            self._search_timer = None
+        try:
+            self.query_one("#suite_tree", SuiteTree).invalidate_search()
+        except Exception:
+            return

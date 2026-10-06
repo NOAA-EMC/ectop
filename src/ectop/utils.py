@@ -17,29 +17,42 @@ from typing import Any
 
 
 def safe_call_app(app: Any, callback: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-    """
-    Safely call a function from the app's loop, checking if we are already in the main thread.
+    """Run a callback only through the active Textual app thread.
 
-    Args:
-        app: The Textual App instance.
-        callback: The function to call.
-        *args: Positional arguments for the callback.
-        **kwargs: Keyword arguments for the callback.
+    Parameters
+    ----------
+    app : Any
+        The Textual App instance.
+    callback : Callable[..., Any]
+        The callback to deliver on the app thread.
+    *args : Any
+        Positional callback arguments.
+    **kwargs : Any
+        Keyword callback arguments.
 
-    Returns:
-        The result of the callback if called synchronously, or the return value
-        of `app.call_from_thread` if scheduled.
+    Returns
+    -------
+    Any
+        The callback result when already on the UI thread, the result of
+        ``call_from_thread`` when dispatched, or ``None`` if the app is stopped.
     """
     try:
-        # Check if the app is currently running in the same thread as this call
-        if hasattr(app, "_thread_id") and app._thread_id == threading.get_ident():
+        if not app.is_running:
+            return None
+        app_thread_id = app._thread_id
+    except (AttributeError, RuntimeError):
+        return None
+
+    if app_thread_id is None:
+        return None
+
+    try:
+        if app_thread_id == threading.get_ident():
             return callback(*args, **kwargs)
     except (AttributeError, RuntimeError):
-        pass
+        return None
 
-    # If app is not running or we're in a different thread, use call_from_thread
     try:
         return app.call_from_thread(callback, *args, **kwargs)
     except (AttributeError, RuntimeError):
-        # Fallback for tests where app might be partially mocked
-        return callback(*args, **kwargs)
+        return None

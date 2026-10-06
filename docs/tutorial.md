@@ -78,8 +78,9 @@ If a task is stuck in the `Queued` state, select it and press `w` to open the **
 ### 🕵️ Searching the Suite
 In large deployments, finding a node can be difficult.
 1. Press `/` to open the **Search Box**.
-2. Type part of the node name or path.
-3. The tree will filter in real-time. Press **Enter** to select the match and clear the search.
+2. Type part of a node name or path. Search runs across the synchronized definitions, including collapsed branches.
+3. The tree selects the match for the latest query. Press **Enter** to search for the next matching path from the current selection.
+4. Press **Escape** to clear and close search. Clearing the input or moving focus away also invalidates pending results, so an older query cannot move the tree afterward.
 
 ### 🎭 Filtering by Status
 Focus on what matters by filtering the tree.
@@ -93,6 +94,8 @@ Orphaned tasks (zombies) can sometimes clog your scheduler. Press `Shift + Z` to
 
 ### 📊 Performance Timeline
 To identify bottlenecks in your workflow, check the **Timeline** tab in the main content area (available after pressing `l` on a family or task).
+
+> If you modify features, API, or usage, you MUST update the documentation immediately.
 - Visualizes the relative state-change times of sibling tasks.
 - Helps identify which tasks in a family are taking the longest to start or finish.
 
@@ -108,8 +111,18 @@ Select any node and press `v` to open the **Variable Tweaker**.
 Need to fix a bug in a script?
 1. Select the task and press `e`.
 2. Your local `$EDITOR` opens with the script content.
-3. Save and quit your editor.
-4. `ectop` will prompt to update the script on the server and optionally **Requeue** the task to apply the fix immediately.
+3. Save and exit with status 0. `EDITOR` may include quoted arguments, for example `EDITOR='code --wait' ectop`.
+4. `ectop` atomically updates the task's `.ecf` source only when the content changed. The source path from `ECF_SCRIPT`, `ECF_FILES`, or `ECF_HOME` must be accessible and writable from the machine running ectop. A non-zero editor exit leaves the source unchanged, and the temporary file is removed on all exit paths.
+5. After an update, `ectop` offers to **Requeue** the task to apply the fix immediately.
+
+### 🔄 Automatic Refresh
+The `--refresh` interval updates the node tree and server status whether or not live logs are enabled. Live output polling remains controlled by the `t` toggle. If a refresh is still running when another interval arrives, ectop records at most one follow-up refresh. An error leaves the last tree visible and marks the status bar with a sync error.
+
+### 🧵 File retrieval
+Press `l` to request output, script, and processed job files. Each file view reports its result independently, so one unavailable file does not hide the other successful files. You can continue navigating while these requests run; ectop discards results after the selected node changes. Calls on the shared ecFlow client remain serialized for native client safety.
+
+### ⚙️ Connection settings
+`--host` and `ECF_HOST` accept a non-empty hostname or IP address. `--port` and `ECF_PORT` accept TCP ports from 1 through 65535. `--refresh` and `ECTOP_REFRESH` require a finite number greater than zero. Command-line values override environment values; invalid values report which setting needs correction.
 
 ---
 

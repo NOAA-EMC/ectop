@@ -1,9 +1,10 @@
+# If you modify features, API, or usage, you MUST update the documentation immediately.
 name: ectop
 channels:
   - conda-forge
 dependencies:
   - ecflow
-  - textual>=0.7.0
+  - textual>=0.37.0
   - rich>=13.0.0
   - pytest
   - pytest-asyncio
