@@ -1,6 +1,7 @@
 #
 # This file is generated from pyproject.toml
+# If you modify features, API, or usage, you MUST update the documentation immediately.
 #
 ecflow
-textual>=0.7.0
+textual>=0.70.0
 rich>=13.0.0

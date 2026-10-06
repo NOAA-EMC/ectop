@@ -70,7 +70,9 @@ endsuite
 
         # Load the defs
         await app.ecflow_client.load_defs(str(defs_file))
-        await app.action_refresh()
+        refresh_worker = app.action_refresh()
+        assert refresh_worker is not None
+        await refresh_worker.wait()
         await pilot.pause()
 
         tree = app.query_one("#suite_tree", SuiteTree)
@@ -78,7 +80,11 @@ endsuite
         target_path = f"/{suite_name}/f1/t1"
 
         # Manually trigger expansion to make sure t1 is created
-        tree._select_by_path_logic(target_path)
+        tree.select_by_path(target_path)
+        for _ in range(50):
+            if tree.cursor_node and tree.cursor_node.data == target_path:
+                break
+            await pilot.pause(0.02)
 
         def find_in_node(node: TreeNode[str]) -> TreeNode[str] | None:
             """
@@ -102,12 +108,19 @@ endsuite
         found_node = find_in_node(tree.root)
 
         assert found_node is not None, f"Node {target_path} not found in tree"
-        tree.select_node(found_node)
         assert tree.cursor_node == found_node
 
         # 3. Trigger a refresh
-        await app.action_refresh()
-        await pilot.pause()
+        refresh_worker = app.action_refresh()
+        assert refresh_worker is not None
+        await refresh_worker.wait()
+        for _ in range(50):
+            if tree.snapshot is not None and tree.snapshot.by_path.get(target_path):
+                await pilot.pause(0.02)
+                if tree.cursor_node and tree.cursor_node.data == target_path:
+                    break
+            else:
+                await pilot.pause(0.02)
 
         # 4. Verify the cursor is back at target_path
         new_found_node = find_in_node(tree.root)

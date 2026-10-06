@@ -1,3 +1,4 @@
+# If you modify features, API, or usage, you MUST update the documentation immediately.
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
@@ -13,7 +14,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
-    "textual",
+    "textual>=0.70.0",
     "rich",
 ]
 
@@ -52,6 +53,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.semantic_release]
+commit_parser = "conventional"
+major_on_zero = true
 version_variables = [
     "src/ectop/__init__.py:__version__",
 ]

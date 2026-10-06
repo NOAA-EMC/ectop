@@ -1,61 +1,14 @@
 # #############################################################################
-# WARNING: If you modify features, API, or usage, you MUST update the
-# documentation immediately.
+# WARNING: If you modify features, API, or usage, you MUST update the documentation immediately.
 # #############################################################################
-import asyncio
 import os
 import random
 import socket
 import subprocess
 import time
-from functools import wraps
+from pathlib import Path
 
 import pytest
-import textual
-
-
-def mock_work(*args, **kwargs):
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            # Check if this was supposed to be a thread worker
-            if kwargs.get("thread") or (len(args) > 0 and isinstance(args[0], dict) and args[0].get("thread")):
-                # In tests, we still run it synchronously, but we must ensure
-                # it doesn't fail call_from_thread if it's mocked to run in the same thread.
-                # However, the simplest way is to just run it.
-                pass
-
-            result = f(*args, **kwargs)
-            if asyncio.iscoroutine(result):
-                # Run the coroutine in the current loop
-                try:
-                    loop = asyncio.get_running_loop()
-                    # We are already in a loop (pytest-asyncio)
-                    # We return the task and let the test await it if needed
-                    task = loop.create_task(result)
-
-                    # We also add a callback to catch exceptions
-                    def _done_callback(t):
-                        try:
-                            t.result()
-                        except Exception:
-                            pass
-
-                    task.add_done_callback(_done_callback)
-                    return task
-                except RuntimeError:
-                    # No loop running, use asyncio.run
-                    return asyncio.run(result)
-            return result
-
-        return wrapper
-
-    if len(args) == 1 and callable(args[0]):
-        return decorator(args[0])
-    return decorator
-
-
-textual.work = mock_work
 
 
 @pytest.fixture(scope="session")
@@ -73,7 +26,42 @@ def free_port():
 
 
 @pytest.fixture(scope="session")
-def ecflow_server(tmp_path_factory, free_port):
+def ecflow_home(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Create an isolated home directory for the real test server.
+
+    Parameters
+    ----------
+    tmp_path_factory : pytest.TempPathFactory
+        Factory for session-scoped temporary directories.
+
+    Returns
+    -------
+    Path
+        The isolated ecFlow server home directory.
+    """
+    return tmp_path_factory.mktemp("ecf_home")
+
+
+@pytest.fixture(scope="session")
+def ecflow_files(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Create the script-search directory used by the real test server.
+
+    Parameters
+    ----------
+    tmp_path_factory : pytest.TempPathFactory
+        Factory for session-scoped temporary directories.
+
+    Returns
+    -------
+    Path
+        The server's ecFlow script-search directory.
+    """
+    path = tmp_path_factory.mktemp("ecf_files")
+    return path
+
+
+@pytest.fixture(scope="session")
+def ecflow_server(ecflow_home: Path, ecflow_files: Path, free_port: int) -> str:
     """
     Start a real ecFlow server for integration testing.
 
@@ -82,13 +70,13 @@ def ecflow_server(tmp_path_factory, free_port):
     """
     import ecflow
 
-    ecf_home = tmp_path_factory.mktemp("ecf_home")
     port = free_port
     host = "localhost"
 
     env = os.environ.copy()
     env["ECF_PORT"] = str(port)
-    env["ECF_HOME"] = str(ecf_home)
+    env["ECF_HOME"] = str(ecflow_home)
+    env["ECF_FILES"] = str(ecflow_files)
     # Ensure it doesn't try to use any existing lists or config
     env["ECF_LISTS"] = ""
 
@@ -102,6 +90,9 @@ def ecflow_server(tmp_path_factory, free_port):
     retries = 30
     connected = False
     while retries > 0:
+        if proc.poll() is not None:
+            stdout, stderr = proc.communicate()
+            raise RuntimeError(f"ecflow_server died on port {port}\nSTDOUT: {stdout}\nSTDERR: {stderr}") from None
         try:
             client.ping()
             connected = True

@@ -1,6 +1,5 @@
 # #############################################################################
-# WARNING: If you modify features, API, or usage, you MUST update the
-# documentation immediately.
+# WARNING: If you modify features, API, or usage, you MUST update the documentation immediately.
 # #############################################################################
 """
 Zombie Management Dashboard for ectop.
@@ -70,7 +69,7 @@ class ZombieDashboard(ModalScreen):
         Handle mount event.
         """
         table = self.query_one(DataTable)
-        table.add_columns("Path", "Status", "User", "Host", "RID", "Try", "Created")
+        table.add_columns("Path", "Command", "Type", "Host", "Process ID", "Try", "Age")
         table.cursor_type = "row"
         self.action_refresh()
 
@@ -94,13 +93,13 @@ class ZombieDashboard(ModalScreen):
         table.clear()
         for i, z in enumerate(self._zombies):
             table.add_row(
-                z.path(),
-                z.calls(),  # Using calls() as a proxy for status/type if needed, or z.type()
-                z.user(),
+                z.path_to_task(),
+                str(z.last_child_cmd()),
+                z.type_str(),
                 z.host(),
-                z.rid(),
+                z.process_or_remote_id(),
                 str(z.try_no()),
-                z.allowed(),  # creation_time might be available in stats or allowed()
+                str(z.duration()),
                 key=str(i),
             )
 

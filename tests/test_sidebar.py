@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import ecflow
 import pytest
 
-from ectop.widgets.sidebar import SuiteTree
+from ectop.widgets.sidebar import DefinitionSnapshot, SuiteTree
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -180,7 +180,7 @@ async def test_select_by_path_integrated(ecflow_server: str) -> None:
 
     suite_name = "s_" + "".join(random.choices(string.ascii_lowercase, k=8))
     client = ecflow.Client(host, int(port))
-    client.delete_all()
+    client.delete_all(force=True)
 
     defs = ecflow.Defs()
     suite = defs.add_suite(suite_name)
@@ -329,3 +329,31 @@ def test_action_cycle_filter() -> None:
         tree.action_cycle_filter()
         assert tree.current_filter is None
         mock_app.notify.assert_called_with("Filter: All")
+
+
+def test_definition_snapshot_projects_real_ecflow_definitions() -> None:
+    """Project real ecFlow definitions into immutable indexed records.
+
+    Returns
+    -------
+    None
+        The test asserts snapshot structure and immutability.
+    """
+    defs = ecflow.Defs()
+    suite = defs.add_suite("snapshot_suite")
+    family = suite.add_family("family")
+    family.add_task("task")
+
+    snapshot = DefinitionSnapshot.from_defs(defs, generation=7)
+
+    assert snapshot.generation == 7
+    assert snapshot.paths == ("/snapshot_suite", "/snapshot_suite/family", "/snapshot_suite/family/task")
+    assert len(snapshot.by_path) == len(snapshot.nodes)
+    assert snapshot.by_path["/snapshot_suite/family"].parent_path == "/snapshot_suite"
+    assert snapshot.by_path["/snapshot_suite/family"].child_paths == ("/snapshot_suite/family/task",)
+    assert snapshot.by_path["/snapshot_suite/family/task"].node_kind == "task"
+
+    with pytest.raises((AttributeError, TypeError)):
+        snapshot.by_path["/other"] = snapshot.nodes[0]  # type: ignore[index]
+    with pytest.raises((AttributeError, TypeError)):
+        snapshot.nodes[0].name = "changed"  # type: ignore[misc]

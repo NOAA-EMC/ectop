@@ -1,132 +1,209 @@
 # #############################################################################
-# WARNING: If you modify features, API, or usage, you MUST update the
-# documentation immediately.
+# WARNING: If you modify features, API, or usage, you MUST update the documentation immediately.
 # #############################################################################
-"""
-Tests for the script editing workflow in ectop.
-
-.. note::
-    If you modify features, API, or usage, you MUST update the documentation immediately.
-"""
+"""Integration coverage for editing scripts through a configured editor."""
 
 from __future__ import annotations
 
-import os
-import tempfile
+import asyncio
+import shlex
+import sys
+import uuid
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
+import ecflow
 import pytest
 
 from ectop.app import Ectop
+from ectop.client import EcflowClient
 
 
-@pytest.fixture
-def mock_app():
+def _create_editor(tmp_path: Path, source: str) -> Path:
+    """Create an executable Python editor used by subprocess integration tests.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Test temporary directory.
+    source : str
+        Python program to run as the editor.
+
+    Returns
+    -------
+    Path
+        Executable editor script path.
     """
-    Fixture for Ectop app with a mocked EcflowClient.
+    path = tmp_path / "editor with spaces.py"
+    path.write_text(f"#!{sys.executable}\n{source}", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+def _load_script_node(ecflow_server: str, ecflow_home: Path, ecflow_files: Path) -> tuple[str, str]:
+    """Load a task with a real script into the test ecFlow server.
+
+    Parameters
+    ----------
+    ecflow_server : str
+        Address of the real ecFlow test server.
+    ecflow_home : Path
+        Isolated ecFlow home directory.
+    ecflow_files : Path
+        Script search directory configured for the test server.
+
+    Returns
+    -------
+    tuple[str, str]
+        Server address and absolute task path.
     """
-    with patch("ectop.app.EcflowClient", autospec=True) as mock_client_cls:
-        app = Ectop()
-        # Mock the instance created by the app
-        app.ecflow_client = mock_client_cls.return_value
-        # Ensure async methods are AsyncMocks
-        app.ecflow_client.file = AsyncMock()
-        app.ecflow_client.alter = AsyncMock()
-        yield app
+    host, port_text = ecflow_server.split(":")
+    server = ecflow.Client(host, int(port_text))
+    server.delete_all(force=True)
+    suite_name = f"edit_suite_{uuid.uuid4().hex[:8]}"
+    task_name = "edit_task"
+    suite_dir = ecflow_files / suite_name
+    suite_dir.mkdir(parents=True, exist_ok=True)
+    (suite_dir / f"{task_name}.ecf").write_text("#!/bin/sh\necho original\n", encoding="utf-8")
+
+    defs = ecflow.Defs()
+    suite = defs.add_suite(suite_name)
+    suite.add_variable("ECF_HOME", str(ecflow_home))
+    suite.add_variable("ECF_FILES", str(ecflow_files))
+    suite.add_task(task_name)
+    server.load(defs, force=True)
+    server.restart_server()
+    server.begin_suite(suite_name)
+    server.job_generation(f"/{suite_name}/{task_name}")
+    return ecflow_server, f"/{suite_name}/{task_name}"
 
 
 @pytest.mark.asyncio
-async def test_edit_script_worker_logic(mock_app) -> None:
+async def test_editor_command_arguments_and_successful_server_update(
+    tmp_path: Path, ecflow_server: str, ecflow_home: Path, ecflow_files: Path
+) -> None:
+    """Honor quoted editor arguments and apply successful changed content.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Test temporary directory.
+    ecflow_server : str
+        Address of the real ecFlow test server.
+    ecflow_home : Path
+        Isolated ecFlow home directory.
+    ecflow_files : Path
+        Script search directory configured for the test server.
     """
-    Test the edit script worker logic using the pilot driver.
-
-    Returns:
-        None
-    """
-    node_path = "/suite/task"
-    content = "test content"
-    mock_app.ecflow_client.file.return_value = content
-
-    async with mock_app.run_test():
-        # Mock _run_editor to avoid launching a real process
-        with patch.object(mock_app, "_run_editor", new_callable=AsyncMock) as mock_run_editor:
-            await mock_app._edit_script_worker(node_path)
-
-            # Verify dependencies were called
-            mock_app.ecflow_client.file.assert_called_with(node_path, "script")
-            mock_run_editor.assert_called_once()
-            args, _ = mock_run_editor.call_args
-            temp_path = args[0]
-            assert os.path.exists(temp_path)
-            assert args[1] == node_path
-            assert args[2] == content
-
-            # Clean up temp file
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-
-
-@pytest.mark.asyncio
-async def test_finish_edit_logic(mock_app) -> None:
-    """
-    Test the finish edit logic to ensure it updates the server correctly.
-
-    Returns:
-        None
-    """
-    node_path = "/suite/task"
-    old_content = "old content"
-    new_content = "new content"
-
-    # Use a real temporary file
-    fd, temp_path = tempfile.mkstemp()
-    try:
-        with os.fdopen(fd, "w") as f:
-            f.write(new_content)
-
-        async with mock_app.run_test():
-            with patch.object(mock_app, "_prompt_requeue") as mock_prompt:
-                await mock_app._finish_edit(temp_path, node_path, old_content)
-
-                mock_app.ecflow_client.alter.assert_called_once_with(node_path, "change", "script", "", new_content)
-                mock_prompt.assert_called_once_with(node_path)
-
-                # Verify temp file was deleted by the method
-                assert not os.path.exists(temp_path)
-    finally:
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
-
-
-@pytest.mark.asyncio
-async def test_run_editor_async(tmp_path: Path) -> None:
-    """
-    Test that _run_editor correctly executes the process asynchronously.
-
-    Args:
-        tmp_path: Pytest temporary path fixture.
-
-    Returns:
-        None
-    """
+    address, node_path = _load_script_node(ecflow_server, ecflow_home, ecflow_files)
+    editor = _create_editor(
+        tmp_path,
+        "import pathlib, sys\n"
+        "assert sys.argv[1] == 'argument with spaces'\n"
+        "pathlib.Path(sys.argv[2]).write_text('edited by integration test\\n')\n",
+    )
+    temp_script = tmp_path / "task.ecf"
+    temp_script.write_text("original\n", encoding="utf-8")
     app = Ectop()
-    # We need to ensure ecflow_client is not None or mock its check
-    app.ecflow_client = MagicMock()
+    host, port_text = address.split(":")
+    source_path = EcflowClient(host, int(port_text)).script_source_path_sync(node_path)
 
-    temp_file = tmp_path / "test.ecf"
-    temp_file.write_text("content")
+    async with app.run_test():
+        app.ecflow_client = EcflowClient(host, int(port_text))
+        app._prompt_requeue = lambda _path: None
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setenv("EDITOR", f'{shlex.quote(sys.executable)} {shlex.quote(str(editor))} "argument with spaces"')
+            await app._run_editor(str(temp_script), node_path, "original\n", source_path)
 
-    # Mock editor that just touches a file to prove it ran
-    done_file = tmp_path / "done"
-    editor_script = tmp_path / "editor.sh"
-    editor_script.write_text(f"#!/bin/sh\ntouch {done_file}")
-    editor_script.chmod(0o755)
+    assert not temp_script.exists()
+    assert Path(source_path).read_text(encoding="utf-8") == "edited by integration test\n"
+    host, port_text = address.split(":")
+    updated_defs = ecflow.Client(host, int(port_text))
+    updated_defs.sync_local()
+    assert updated_defs.get_defs().find_abs_node(node_path) is not None
+    assert "edited by integration test" in updated_defs.get_file(node_path, "script")
 
-    with patch.dict(os.environ, {"EDITOR": str(editor_script)}):
-        async with app.run_test():
-            with patch.object(app, "_finish_edit", new_callable=AsyncMock) as mock_finish:
-                await app._run_editor(str(temp_file), "/path", "old")
 
-                assert done_file.exists()
-                mock_finish.assert_called_once()
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source", "editor_override", "expected"),
+    [
+        ("pass\n", None, "No changes detected"),
+        ("raise SystemExit(7)\n", None, "status 7"),
+        ("pass\n", "missing-editor-executable", "Failed to start"),
+    ],
+)
+async def test_editor_failure_and_unchanged_content_never_alter_server(
+    tmp_path: Path, source: str, editor_override: str | None, expected: str
+) -> None:
+    """Handle unchanged, non-zero, and missing-editor outcomes with cleanup.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Test temporary directory.
+    source : str
+        Editor program body.
+    editor_override : str | None
+        Explicit editor command for the missing-executable case.
+    expected : str
+        Expected error or notification text.
+    """
+    editor = _create_editor(tmp_path, source)
+    temp_script = tmp_path / "task.ecf"
+    temp_script.write_text("original\n", encoding="utf-8")
+    source_script = tmp_path / "source.ecf"
+    source_script.write_text("original\n", encoding="utf-8")
+    app = Ectop()
+
+    async with app.run_test() as pilot:
+        command = editor_override or f"{shlex.quote(sys.executable)} {shlex.quote(str(editor))}"
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setenv("EDITOR", command)
+            if expected == "No changes detected":
+                await app._run_editor(str(temp_script), "/suite/task", "original\n", str(source_script))
+            else:
+                with pytest.raises((RuntimeError, FileNotFoundError), match=expected):
+                    await app._run_editor(str(temp_script), "/suite/task", "original\n", str(source_script))
+        await pilot.pause()
+
+    assert not temp_script.exists()
+    assert source_script.read_text(encoding="utf-8") == "original\n"
+
+
+@pytest.mark.asyncio
+async def test_editor_interruption_cleans_temp_file(tmp_path: Path) -> None:
+    """Terminate an interrupted editor process and remove its temporary file.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Test temporary directory.
+    """
+    marker = tmp_path / "started"
+    editor = _create_editor(
+        tmp_path,
+        "import pathlib, sys, time\n" f"pathlib.Path({str(marker)!r}).write_text('started')\n" "time.sleep(30)\n",
+    )
+    temp_script = tmp_path / "task.ecf"
+    temp_script.write_text("original\n", encoding="utf-8")
+    source_script = tmp_path / "source.ecf"
+    source_script.write_text("original\n", encoding="utf-8")
+    app = Ectop()
+
+    async with app.run_test():
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setenv("EDITOR", f"{shlex.quote(sys.executable)} {shlex.quote(str(editor))}")
+            running = asyncio.create_task(app._run_editor(str(temp_script), "/suite/task", "original\n", str(source_script)))
+            for _ in range(500):
+                if marker.exists():
+                    break
+                if running.done():
+                    await running
+                await asyncio.sleep(0.01)
+            assert marker.exists()
+            running.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await running
+
+    assert not temp_script.exists()
+    assert source_script.read_text(encoding="utf-8") == "original\n"

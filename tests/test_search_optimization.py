@@ -1,14 +1,11 @@
 # #############################################################################
-# WARNING: If you modify features, API, or usage, you MUST update the
-# documentation immediately.
+# WARNING: If you modify features, API, or usage, you MUST update the documentation immediately.
 # #############################################################################
 """
 Tests for SuiteTree search optimization.
 """
 
 from __future__ import annotations
-
-import unittest.mock as mock
 
 import ecflow
 import pytest
@@ -18,7 +15,7 @@ from ectop.widgets.sidebar import SuiteTree
 
 
 @pytest.mark.asyncio
-async def test_search_cache_background_building():
+async def test_search_cache_background_building() -> None:
     """
     Test that the search cache is built in the background after update_tree.
     """
@@ -46,7 +43,7 @@ async def test_search_cache_background_building():
 
 
 @pytest.mark.asyncio
-async def test_find_and_select_fallback():
+async def test_find_and_select_after_snapshot_build():
     """
     Test that find_and_select builds the cache if it's missing (fallback).
     """
@@ -56,7 +53,7 @@ async def test_find_and_select_fallback():
             yield SuiteTree("Test")
 
     app = TestApp()
-    async with app.run_test():
+    async with app.run_test() as pilot:
         tree = app.query_one(SuiteTree)
 
         real_defs = ecflow.Defs()
@@ -64,21 +61,12 @@ async def test_find_and_select_fallback():
 
         tree.defs = real_defs
         tree._all_paths_cache = None
+        tree.find_and_select("suite")
+        for _ in range(40):
+            if tree.cursor_node and tree.cursor_node.data == "/suite":
+                break
+            await pilot.pause(0.05)
 
-        # This should trigger the fallback logic.
-        # We mock _select_by_path_logic because it's now called by find_and_select.
-        with mock.patch.object(tree, "_select_by_path_logic") as mock_select:
-            tree.find_and_select("suite")
-            # find_and_select is now a worker
-            import asyncio
-
-            for _ in range(10):
-                if mock_select.called:
-                    break
-                await asyncio.sleep(0.1)
-
-            assert mock_select.called
-        # all_paths_cache might contain duplicates if the traversal is not careful or
-        # depending on ecFlow version behavior of get_all_nodes() on Defs vs Suites.
-        # We check for existence of the path.
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == "/suite"
         assert "/suite" in tree._all_paths_cache

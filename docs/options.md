@@ -1,5 +1,7 @@
 # Configuration & Options
 
+> If you modify features, API, or usage, you MUST update the documentation immediately.
+
 `ectop` can be configured via command-line arguments, environment variables, and interactive key bindings.
 
 ## Command-Line Options
@@ -10,12 +12,14 @@ You can pass the following arguments when starting `ectop` from the terminal:
 |--------|-------------|---------|
 | `--host <string>` | The hostname or IP address of the ecFlow server. | `localhost` |
 | `--port <int>` | The port number the ecFlow server is listening on. | `3141` |
-| `--refresh <float>` | The interval (in seconds) for automatic tree and log updates. | `2.0` |
+| `--refresh <float>` | A finite interval greater than zero, in seconds. Updates the tree and server status; live log retrieval is controlled separately. | `2.0` |
 
 Example:
 ```bash
 ectop --host my-ecflow-server --port 3500 --refresh 5.0
 ```
+
+`--host` must contain a non-empty hostname or IP address. `--port` accepts TCP ports from `1` through `65535`. `--refresh` accepts finite numbers greater than `0`. Invalid CLI or environment values produce a setting-specific parser error.
 
 ## Environment Variables
 
@@ -26,7 +30,11 @@ ectop --host my-ecflow-server --port 3500 --refresh 5.0
 | `ECF_HOST` | The hostname of the ecFlow server. | `localhost` |
 | `ECF_PORT` | The port number of the ecFlow server. | `3141` |
 | `ECTOP_REFRESH` | The automatic refresh interval in seconds. | `2.0` |
-| `EDITOR` | The text editor used for editing node scripts on the fly. | `vi` |
+| `EDITOR` | Editor executable and optional arguments. Quoting groups arguments; shell expansion is not performed. | `vi` |
+
+The command line overrides the matching environment variable. For example, `EDITOR='code --wait' ectop` starts Code with its wait option. A script source is atomically updated only after the editor exits successfully and the content changed. The `.ecf` source located through `ECF_SCRIPT`, `ECF_FILES`, or `ECF_HOME` must be accessible and writable on the machine running ectop. A failed editor leaves the source untouched, and the temporary file is removed even if editing is interrupted.
+
+The `--refresh` interval also applies when live logs are off. Overlapping automatic tree/status refresh ticks are coalesced to one pending refresh. Live output polling still requires the Live toggle and the output tab.
 
 ## Key Bindings
 

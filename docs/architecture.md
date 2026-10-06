@@ -1,3 +1,4 @@
+<!-- If you modify features, API, or usage, you MUST update the documentation immediately. -->
 # Architecture
 
 `ectop` is built using the [Textual](https://textual.textualize.io/) framework, providing a modern and responsive TUI experience.
@@ -31,9 +32,19 @@ The UI is decomposed into several modular widgets:
 
 To maintain a smooth UI, all blocking calls to the ecFlow server (which involve network I/O) are offloaded to **Textual Workers** using the `@work` decorator.
 
-- **Thread-safe Updates**: Workers that need to update the UI use `self.call_from_thread()` or Textual's message-passing system.
-- **Exclusive Workers**: Operations like "Refresh" use `exclusive=True` to prevent multiple simultaneous sync operations.
+- **Thread-safe Updates**: Workers produce plain results and deliver them through the running app's UI thread. Delivery is discarded after shutdown; a worker never calls a widget directly as a fallback.
+- **Worker Groups**: Search, tree building, child loading, and refresh use separate named groups so an exclusive worker cannot cancel unrelated work.
+- **Definition Snapshots**: A refresh generation is projected into immutable plain node records. Search, filter visibility, and lazy tree expansion read this snapshot; widgets are only read or changed on the UI thread.
+- **Filter Indexes**: Status-to-path and ancestor visibility sets are computed once per snapshot. Filter and Focus Mode changes reuse those indexes, keep required ancestors visible, and restore the selected path when it remains in view. The 10,000-node target is below one second at the 95th percentile.
+- **Latest Search Wins**: Search input is debounced, searches all paths including collapsed branches, and applies a result only when both its query and definition generations are current. Clearing, cancelling, or leaving the search field invalidates pending results.
+- **Serialized ecFlow Client**: Calls through the shared `ecflow.Client` remain protected by one lock because the ecFlow API does not document safe concurrent access.
+- **Exclusive Workers**: Operations that supersede earlier work use `exclusive=True` within their own named group.
+- **Node Files**: Output, script, and processed-job requests are submitted as separate background calls. Each view receives its own success or error, while the shared client lock continues to serialize native ecFlow calls. The app tracks the selected path across asynchronous tree refreshes; results for a different current node are dropped.
+- **Script Editing**: `$EDITOR` is split into an executable and arguments with shell-style quoting, then launched without a shell. Only a successful process that changes the file atomically replaces its ecFlow `.ecf` source. ectop resolves the source from `ECF_SCRIPT`, `ECF_FILES`, or `ECF_HOME`; the source must be accessible and writable on the machine running ectop. The temporary edit file is removed for success, failure, and cancellation. ecFlow locates scripts using these variables and directory search rules ([official file-location algorithm](https://ecflow.readthedocs.io/en/5.13.0/glossary.html#ecf-file-location-algorithm)).
+- **Textual Support Floor**: ectop supports Textual 0.70.0 and newer. CI tests the declared minimum and the latest release; older versions are outside the supported range.
 
 ## Event Loop
 
-`ectop` uses a periodic interval (set in `on_mount`) to perform "live" updates, such as tailing log files when a node is active and the "Live" toggle is enabled.
+`ectop` uses the configured interval for tree and server-status refresh independently of live-log retrieval. Log polling remains conditional on the "Live" toggle and the active output tab. A refresh already in progress coalesces timer ticks rather than building an unbounded queue. A failed refresh updates the connection status and keeps the last definitions snapshot visible.
+
+> If you modify features, API, or usage, you MUST update the documentation immediately.

@@ -1,3 +1,4 @@
+<!-- If you modify features, API, or usage, you MUST update the documentation immediately. -->
 # Contributing to ectop
 
 Thank you for your interest in improving `ectop`!
@@ -67,3 +68,18 @@ mkdocs serve
 3.  Include unit tests for any new functionality.
 4.  Update the documentation if you change the API or usage.
 5.  Submit a Pull Request to the `main` branch.
+
+### Semantic Versioning and Releases
+
+Use a Conventional Commit title for every pull request. The title becomes the release input when the pull request is merged to `main`:
+
+| Title prefix | Release impact |
+| --- | --- |
+| `fix:` or `perf:` | Patch version |
+| `feat:` | Minor version |
+| `type(scope)!:` or a `BREAKING CHANGE:` footer | Major version |
+| `docs:`, `test:`, `ci:`, `refactor:`, `build:`, `chore:`, `revert:`, or `style:` | No version bump by itself |
+
+The `Validate semantic-release PR title` CI check enforces the title format. Squash-merge pull requests so the validated title becomes the commit message that semantic release reads; if you use another merge method, keep each commit title conventional too. After merge, the release job runs only when linting and the Python/ecFlow test matrix pass. Python Semantic Release updates the version in `pyproject.toml` and `src/ectop/__init__.py`, updates `CHANGELOG.md`, builds distributions, tags the commit as `vX.Y.Z`, and creates a GitHub Release with the wheel and source archive attached. Publishing to PyPI is not configured.
+
+The repository must allow the workflow's `GITHUB_TOKEN` to push its version commit and tag to `main` and create releases. If branch protection blocks workflow pushes, configure an Actions bypass for this release job before expecting automatic releases. Require the PR-title check in branch protection to prevent nonconventional titles from bypassing version selection.

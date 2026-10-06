@@ -1,3 +1,4 @@
+# If you modify features, API, or usage, you MUST update the documentation immediately.
 name: CI
 
 on:
@@ -22,12 +23,31 @@ jobs:
       - name: Run pre-commit
         run: pre-commit run --all-files
 
+  validate-pr-title:
+    name: Validate semantic-release PR title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a Conventional Commit title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ "$PR_TITLE" =~ ^(feat|fix|perf|build|ci|docs|refactor|revert|style|test|chore)(\([[:alnum:]./_-]+\))?(!)?:[[:space:]]+[^[:space:]].*$ ]]; then
+            echo "Accepted Conventional Commit title: $PR_TITLE"
+          else
+            echo "Invalid PR title: $PR_TITLE" >&2
+            echo "Use '<type>[optional scope][!]: <description>', e.g. 'feat(search): find nodes across suites'." >&2
+            echo "Use 'feat' for a minor release, 'fix' or 'perf' for a patch, and '!' or BREAKING CHANGE for a major release." >&2
+            exit 1
+          fi
+
   test:
     needs: lint
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
+        textual-version: ["0.70.0", "latest"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Conda/Miniforge
@@ -42,6 +62,13 @@ jobs:
       - name: Install package
         shell: bash -el {0}
         run: pip install -e .[dev]
+      - name: Select Textual compatibility version
+        shell: bash -el {0}
+        run: |
+          if [[ "${{ matrix.textual-version }}" != "latest" ]]; then
+            python -m pip install "textual==${{ matrix.textual-version }}"
+          fi
+          python -c "import textual; print(f'Testing Textual {textual.__version__}')"
       - name: Run tests
         shell: bash -el {0}
         run: pytest
@@ -62,6 +89,13 @@ jobs:
         with:
           fetch-depth: 0
       - name: Python Semantic Release
+        id: semantic-release
         uses: python-semantic-release/python-semantic-release@v9.8.8
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload distributions to the GitHub Release
+        if: steps.semantic-release.outputs.released == 'true'
+        uses: python-semantic-release/publish-action@v9
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.semantic-release.outputs.tag }}

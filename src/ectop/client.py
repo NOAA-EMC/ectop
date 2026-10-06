@@ -12,7 +12,9 @@ ecFlow Client Wrapper for ectop.
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import ecflow
@@ -170,8 +172,109 @@ class EcflowClient:
 
         Notes:
             This is an async method that runs the blocking call in a separate thread.
+            Concurrent callers do not block the UI event loop, while ``file_sync``
+            retains the shared lock so calls on this client stay serialized.
         """
         return await asyncio.to_thread(self.file_sync, path, file_type)
+
+    def script_source_path_sync(self, path: str) -> str:
+        """Resolve the locally accessible ``.ecf`` source for a task.
+
+        Parameters
+        ----------
+        path : str
+            Absolute ecFlow task path.
+
+        Returns
+        -------
+        str
+            Resolved, existing script source path.
+
+        Raises
+        ------
+        RuntimeError
+            If the task is missing or its script cannot be resolved locally.
+        """
+        with self._lock:
+            try:
+                self.client.sync_local()
+                defs = self.client.get_defs()
+            except RuntimeError as error:
+                raise RuntimeError(f"Failed to resolve script source for {path}: {error}") from error
+
+        if defs is None:
+            raise RuntimeError(f"No definitions available to resolve the script source for {path}")
+        node = defs.find_abs_node(path)
+        if node is None:
+            raise RuntimeError(f"Node {path} is not present in the current ecFlow definitions")
+
+        def _variable_value(name: str) -> str | None:
+            for lookup_variable in (node.find_variable, node.find_parent_variable, node.find_gen_variable):
+                variable = lookup_variable(name)
+                if variable is not None and variable.name() == name:
+                    return variable.value()
+            return None
+
+        script = _variable_value("ECF_SCRIPT")
+        files = _variable_value("ECF_FILES")
+        home = _variable_value("ECF_HOME")
+        extension = _variable_value("ECF_EXTN") or ".ecf"
+        lookup = _variable_value("ECF_FILES_LOOKUP") or ""
+        path_parts = [part for part in path.split("/") if part]
+        if not path_parts:
+            raise RuntimeError(f"Cannot resolve a task script for ecFlow path {path!r}")
+
+        candidates: list[Path] = []
+        if script:
+            candidates.append(Path(script).expanduser())
+
+        def _directory_candidates(root_text: str) -> list[Path]:
+            roots = [Path(root).expanduser() for root in root_text.split(os.pathsep) if root]
+            resolved: list[Path] = []
+            for root in roots:
+                if lookup == "prune_leaf":
+                    suffixes = [(*path_parts[:index], path_parts[-1]) for index in range(len(path_parts) - 1, -1, -1)]
+                else:
+                    suffixes = [path_parts[index:] for index in range(len(path_parts))]
+                resolved.extend(root.joinpath(*suffix[:-1], f"{suffix[-1]}{extension}") for suffix in suffixes)
+            return resolved
+
+        if files:
+            candidates.extend(_directory_candidates(files))
+        if home:
+            candidates.extend(_directory_candidates(home))
+
+        for candidate in candidates:
+            try:
+                if candidate.is_file():
+                    return str(candidate.resolve(strict=True))
+            except OSError:
+                continue
+        raise RuntimeError(
+            f"Cannot edit {path}: its ecFlow script is not accessible on this machine. "
+            "Make the task's ECF_SCRIPT, ECF_FILES, or ECF_HOME source path writable and accessible. "
+            f"Checked: {', '.join(str(candidate) for candidate in candidates) or 'no configured source path'}."
+        )
+
+    async def script_source_path(self, path: str) -> str:
+        """Resolve a task's local script path without blocking the UI loop.
+
+        Parameters
+        ----------
+        path : str
+            Absolute ecFlow task path.
+
+        Returns
+        -------
+        str
+            Resolved, existing script source path.
+
+        Raises
+        ------
+        RuntimeError
+            If ecFlow cannot synchronize or the source is not locally accessible.
+        """
+        return await asyncio.to_thread(self.script_source_path_sync, path)
 
     def suspend_sync(self, path: str) -> None:
         """
@@ -623,7 +726,7 @@ class EcflowClient:
         """
         with self._lock:
             try:
-                return self.client.zombie_get()
+                return self.client.zombie_get(60)
             except RuntimeError as e:
                 raise RuntimeError(f"Failed to get zombies: {e}") from e
 

@@ -1,3 +1,4 @@
+<!-- If you modify features, API, or usage, you MUST update the documentation immediately. -->
 [![License: CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://NOAA-EMC.github.io/ectop/)
 [![Disclaimer](https://img.shields.io/badge/disclaimer-read%20first-yellow)](DISCLAIMER.md)
@@ -33,7 +34,7 @@ conda activate ectop
 pip install .
 ```
 
-*Note: `ecflow` must be installed on your system. It is typically available via Conda.*
+ectop supports Textual 0.70.0 and newer; the project metadata installs this range automatically. `ecflow` must also be installed on your system. It is typically available via Conda.
 
 ## Usage
 

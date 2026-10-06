@@ -11,7 +11,7 @@ Tests for refactored logic and new features.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import ecflow
 import pytest
@@ -113,38 +113,33 @@ def test_why_inspector_nested_parsing(ecflow_server) -> None:
 
 @pytest.mark.asyncio
 async def test_suite_tree_select_by_path_worker(ecflow_server) -> None:
-    """
-    Test SuiteTree.select_by_path uses worker logic.
+    """Test selecting a nested path through the mounted tree.
 
-    Args:
-        ecflow_server: The ecflow_server fixture.
+    Parameters
+    ----------
+    ecflow_server : str
+        Address of the real ecFlow test server.
     """
     host, port = ecflow_server.split(":")
     client = ecflow.Client(host, int(port))
+    client.delete_all(force=True)
 
     defs = ecflow.Defs()
-    defs.add_suite("s1")
+    defs.add_suite("s1").add_family("f1").add_task("t1")
     client.load(defs, force=True)
-    client.sync_local()
-    real_defs = client.get_defs()
+    app = Ectop(host, int(port), refresh_interval=60)
 
-    tree = SuiteTree("Test")
-    tree.defs = real_defs
+    async with app.run_test() as pilot:
+        tree = app.query_one(SuiteTree)
+        for _ in range(100):
+            if tree.snapshot is not None:
+                break
+            await pilot.pause(0.02)
+        assert tree.snapshot is not None
 
-    # Mock UI node
-    mock_ui_suite = MagicMock()
-    mock_ui_suite.data = "/s1"
-
-    with (
-        patch.object(type(tree.root), "children", new_callable=PropertyMock) as mock_children,
-        patch.object(SuiteTree, "app", new=MagicMock()) as mock_app,
-        patch.object(tree, "_load_children"),
-        patch.object(tree, "_select_and_reveal"),
-    ):
-        mock_children.return_value = [mock_ui_suite]
-
-        # We call the logic method directly for synchronous testing
-        tree._select_by_path_logic("/s1")
-
-        # It should have found the suite and called _select_and_reveal via call_from_thread
-        mock_app.call_from_thread.assert_any_call(tree._select_and_reveal, mock_ui_suite)
+        tree.select_by_path("/s1/f1/t1")
+        for _ in range(50):
+            if app.get_selected_path() == "/s1/f1/t1":
+                break
+            await pilot.pause(0.02)
+        assert app.get_selected_path() == "/s1/f1/t1"

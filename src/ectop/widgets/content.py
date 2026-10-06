@@ -400,12 +400,19 @@ class MainContent(Vertical):
         safe_call_app(self.app, _update_ui)
 
     def show_error(self, widget_id: str, message: str) -> None:
-        """
-        Display an error message in a specific widget and clear cache.
+        """Display a file error in its own view and clear that view's cache.
 
-        Args:
-            widget_id: The ID of the widget where the error should be shown.
-            message: The error message to display.
+        Parameters
+        ----------
+        widget_id : str
+            ID of the output, script, or job widget receiving the error.
+        message : str
+            Error message to display.
+
+        Notes
+        -----
+        The cache and widget for this file type are updated independently, so
+        another file result already loaded for the node remains visible.
         """
         cache_key = None
         if widget_id == "#log_output":

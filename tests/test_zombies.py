@@ -1,55 +1,52 @@
 # #############################################################################
-# WARNING: If you modify features, API, or usage, you MUST update the
-# documentation immediately.
+# WARNING: If you modify features, API, or usage, you MUST update the documentation immediately.
 # #############################################################################
-"""
-Tests for Zombie Management Dashboard.
-"""
+"""Real-server tests for the Zombie Management Dashboard."""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
-
 import pytest
+from textual.widgets import DataTable
 
+from ectop.app import Ectop
 from ectop.client import EcflowClient
 from ectop.widgets.modals.zombies import ZombieDashboard
 
 
 @pytest.mark.asyncio
-async def test_zombie_refresh():
+async def test_zombie_refresh(ecflow_server: str) -> None:
+    """Refresh the dashboard from a real ecFlow server and update its table.
+
+    Parameters
+    ----------
+    ecflow_server : str
+        Address of the real ecFlow test server.
     """
-    Test that action_refresh fetches zombies and updates the table.
-    """
-    mock_client = MagicMock(spec=EcflowClient)
+    host, port_text = ecflow_server.split(":")
+    client = EcflowClient(host, int(port_text))
+    app = Ectop(host, int(port_text), refresh_interval=60)
+    dashboard = ZombieDashboard(client)
 
-    # Mock ecflow.Zombie
-    zombie = MagicMock()
-    zombie.path = MagicMock(return_value="/s1/t1")
-    zombie.calls = MagicMock(return_value="zombie")
-    zombie.user = MagicMock(return_value="user")
-    zombie.host = MagicMock(return_value="host")
-    zombie.rid = MagicMock(return_value="123")
-    zombie.try_no = MagicMock(return_value=1)
-    zombie.allowed = MagicMock(return_value="time")
+    async with app.run_test() as pilot:
+        app.push_screen(dashboard)
+        for _ in range(50):
+            if app.screen is dashboard:
+                break
+            await pilot.pause(0.02)
+        assert app.screen is dashboard
+        for _ in range(50):
+            try:
+                dashboard.query_one(DataTable)
+                break
+            except Exception:
+                await pilot.pause(0.02)
+        else:
+            pytest.fail("zombie table was not composed")
 
-    mock_client.zombie_get = AsyncMock(return_value=[zombie])
-
-    dashboard = ZombieDashboard(mock_client)
-
-    # Mock DataTable and other components
-    mock_table = MagicMock()
-    mock_table.cursor_row = None
-
-    mock_app = MagicMock()
-    with (
-        patch.object(dashboard, "query_one", return_value=mock_table),
-        patch.object(ZombieDashboard, "app", return_value=mock_app, new_callable=PropertyMock),
-    ):
-        await dashboard.action_refresh()
-
-        mock_client.zombie_get.assert_called_once()
-        mock_table.clear.assert_called_once()
-        mock_table.add_row.assert_called_once()
-        args, kwargs = mock_table.add_row.call_args
-        assert args[0] == "/s1/t1"
+        worker = dashboard.action_refresh()
+        assert worker is not None
+        await worker.wait()
+        actual_zombies = await client.zombie_get()
+        table = dashboard.query_one(DataTable)
+        assert [zombie.path_to_task() for zombie in dashboard._zombies] == [zombie.path_to_task() for zombie in actual_zombies]
+        assert table.row_count == len(actual_zombies)

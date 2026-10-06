@@ -1,6 +1,5 @@
 # #############################################################################
-# WARNING: If you modify features, API, or usage, you MUST update the
-# documentation immediately.
+# WARNING: If you modify features, API, or usage, you MUST update the documentation immediately.
 # #############################################################################
 """
 Tests for error paths and robustness in the Ectop app.
@@ -8,7 +7,7 @@ Tests for error paths and robustness in the Ectop app.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -43,9 +42,29 @@ def app(client_instance):
     Returns:
         Ectop: An app instance.
     """
-    app = Ectop(host=client_instance.host, port=client_instance.port)
+    app = Ectop(host=client_instance.host, port=client_instance.port, refresh_interval=60)
     app.ecflow_client = client_instance
     return app
+
+
+async def _wait_for_startup(app: Ectop, pilot) -> None:
+    """Wait for the one startup connection and its initial refresh to finish.
+
+    Parameters
+    ----------
+    app : Ectop
+        Running application.
+    pilot : textual.pilot.Pilot
+        Test driver used to let the refresh worker advance.
+    """
+    worker = app._initial_connect_worker
+    assert worker is not None
+    await worker.wait()
+    for _ in range(200):
+        if not app._refresh_in_flight:
+            return
+        await pilot.pause(0.05)
+    raise AssertionError("the initial tree refresh did not finish")
 
 
 @pytest.mark.asyncio
@@ -56,8 +75,9 @@ async def test_app_initial_connect_success(app):
     Args:
         app: The Ectop app fixture.
     """
-    await app._initial_connect()
-    assert app.ecflow_client is not None
+    async with app.run_test() as pilot:
+        await _wait_for_startup(app, pilot)
+        assert app.ecflow_client is not None
 
 
 @pytest.mark.asyncio
@@ -69,11 +89,13 @@ async def test_run_client_command_error(app):
         app: The Ectop app fixture.
     """
     app.notify = MagicMock()
-    # Attempting to suspend a non-existent node should trigger an error from the server
-    await app._run_client_command("suspend", "/non_existent")
-    app.notify.assert_called()
-    args, kwargs = app.notify.call_args
-    assert "Error" in args[0] or kwargs.get("severity") == "error"
+    async with app.run_test() as pilot:
+        await _wait_for_startup(app, pilot)
+        worker = app._run_client_command("suspend", "/non_existent")
+        await worker.wait()
+        app.notify.assert_called()
+        args, kwargs = app.notify.call_args
+        assert "Error" in args[0] or kwargs.get("severity") == "error"
 
 
 @pytest.mark.asyncio
@@ -85,16 +107,15 @@ async def test_action_refresh_error(app):
         app: The Ectop app fixture.
     """
     app.notify = MagicMock()
-    mock_sb = MagicMock()
-
-    # We mock query_one to return our mock status bar
-    with patch.object(app, "query_one", return_value=mock_sb):
-        # We manually break the client to simulate a connection error
-        with patch.object(app.ecflow_client, "sync_local", side_effect=RuntimeError("Sync failed")):
-            await app.action_refresh()
-            mock_sb.update_status.assert_called_with(app.ecflow_client.host, app.ecflow_client.port, status=STATUS_SYNC_ERROR)
-            app.notify.assert_called()
-            assert "Sync failed" in str(app.notify.call_args)
+    async with app.run_test() as pilot:
+        await _wait_for_startup(app, pilot)
+        app.ecflow_client = EcflowClient("localhost", 1)
+        worker = app.action_refresh()
+        assert worker is not None
+        await worker.wait()
+        status_bar = app.query_one("#status_bar")
+        assert status_bar.status == STATUS_SYNC_ERROR
+        app.notify.assert_called()
 
 
 @pytest.mark.asyncio
@@ -106,16 +127,15 @@ async def test_lost_connection_during_command(app):
         app: The Ectop app fixture.
     """
     app.notify = MagicMock()
-
-    # Mock the client method to raise a connection-related RuntimeError
-    with patch.object(app.ecflow_client, "suspend", side_effect=RuntimeError("Connection lost")):
-        await app._run_client_command("suspend", "/some/path")
-
-    app.notify.assert_called()
-    assert "Connection lost" in str(app.notify.call_args)
-    # Severity should be error
-    args, kwargs = app.notify.call_args
-    assert kwargs.get("severity") == "error"
+    async with app.run_test() as pilot:
+        await _wait_for_startup(app, pilot)
+        app.ecflow_client = EcflowClient("localhost", 1)
+        worker = app._run_client_command("suspend", "/some/path")
+        await worker.wait()
+        app.notify.assert_called()
+        assert "Failed to suspend" in str(app.notify.call_args)
+        args, kwargs = app.notify.call_args
+        assert kwargs.get("severity") == "error"
 
 
 @pytest.mark.asyncio
@@ -124,17 +144,14 @@ async def test_initial_connect_failure():
     Test app behavior when initial connection fails.
     """
     # Use a port that is definitely not listening
-    app = Ectop(host="localhost", port=1)
+    app = Ectop(host="localhost", port=1, refresh_interval=60)
     app.notify = MagicMock()
 
-    with patch("ectop.app.SuiteTree"):
-        mock_tree = MagicMock()
-        app.query_one = MagicMock(return_value=mock_tree)
-
-        await app._initial_connect()
-
+    async with app.run_test() as pilot:
+        worker = app._initial_connect_worker
+        assert worker is not None
+        await worker.wait()
+        await pilot.pause(0.1)
         app.notify.assert_called()
-        # The constant ERROR_CONNECTION_FAILED is "Connection Failed"
         assert "Connection Failed" in str(app.notify.call_args)
-        # It should have called _update_tree_error
-        assert "failed" in str(mock_tree.root.label).lower()
+        assert "failed" in str(app.query_one("#suite_tree").root.label).lower()
