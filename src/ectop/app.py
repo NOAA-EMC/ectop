@@ -16,6 +16,7 @@ import os
 import shlex
 import stat
 import tempfile
+from importlib import import_module
 from typing import Any
 
 from textual import work
@@ -947,8 +948,6 @@ class Ectop(App):
             This is an async method that uses `asyncio.create_subprocess_exec`
             to avoid blocking the event loop while the TUI is suspended.
         """
-        from textual.app import SuspendNotSupported
-
         process: asyncio.subprocess.Process | None = None
         try:
             try:
@@ -971,13 +970,19 @@ class Ectop(App):
                 except OSError as error:
                     raise RuntimeError(f"Failed to start editor '{editor[0]}': {error}") from error
 
-            try:
-                with self.suspend():
-                    process = await _launch_editor()
-                    return_code = await process.wait()
-            except SuspendNotSupported:
+            suspend = getattr(self, "suspend", None)
+            suspend_not_supported = getattr(import_module("textual.app"), "SuspendNotSupported", ())
+            if suspend is None:
                 process = await _launch_editor()
                 return_code = await process.wait()
+            else:
+                try:
+                    with suspend():
+                        process = await _launch_editor()
+                        return_code = await process.wait()
+                except suspend_not_supported:
+                    process = await _launch_editor()
+                    return_code = await process.wait()
 
             if return_code != 0:
                 raise RuntimeError(f"Editor exited with status {return_code}; script was not updated")

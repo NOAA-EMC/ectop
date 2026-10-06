@@ -194,9 +194,11 @@ async def test_editor_interruption_cleans_temp_file(tmp_path: Path) -> None:
         with pytest.MonkeyPatch.context() as monkeypatch:
             monkeypatch.setenv("EDITOR", f"{shlex.quote(sys.executable)} {shlex.quote(str(editor))}")
             running = asyncio.create_task(app._run_editor(str(temp_script), "/suite/task", "original\n", str(source_script)))
-            for _ in range(100):
+            for _ in range(500):
                 if marker.exists():
                     break
+                if running.done():
+                    await running
                 await asyncio.sleep(0.01)
             assert marker.exists()
             running.cancel()

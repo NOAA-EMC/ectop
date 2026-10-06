@@ -30,10 +30,18 @@ async def test_zombie_refresh(ecflow_server: str) -> None:
     async with app.run_test() as pilot:
         app.push_screen(dashboard)
         for _ in range(50):
-            if dashboard.is_mounted:
+            if app.screen is dashboard:
                 break
             await pilot.pause(0.02)
-        assert dashboard.is_mounted
+        assert app.screen is dashboard
+        for _ in range(50):
+            try:
+                dashboard.query_one(DataTable)
+                break
+            except Exception:
+                await pilot.pause(0.02)
+        else:
+            pytest.fail("zombie table was not composed")
 
         worker = dashboard.action_refresh()
         assert worker is not None
