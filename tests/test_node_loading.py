@@ -137,10 +137,8 @@ async def test_node_files_load_independently_and_navigation_stays_responsive(
         tree = app.query_one(SuiteTree)
         await _wait_for_snapshot(pilot, tree)
         await _select_path(pilot, app, paths[0])
-        app._node_load_generation += 1
-        generation = app._node_load_generation
         started = time.perf_counter()
-        worker = app._load_node_worker(paths[0], generation)
+        worker = app._load_node_worker(paths[0])
         # The UI remains able to switch views while server calls run in threads.
         content = app.query_one(MainContent)
         content.active = "tab_script"
@@ -180,16 +178,13 @@ async def test_missing_file_does_not_block_other_views_and_stale_node_is_discard
         await _wait_for_snapshot(pilot, tree)
         content = app.query_one(MainContent)
         await _select_path(pilot, app, paths[1])
-        app._node_load_generation += 1
-        worker = app._load_node_worker(paths[1], app._node_load_generation)
+        worker = app._load_node_worker(paths[1])
         await worker.wait()
         assert "echo no-output" in content._content_cache.get("script", "")
         assert "missing_output" in content._content_cache.get("job", "")
         assert content._content_cache.get("output", "") == ""
 
-        stale_generation = app._node_load_generation
-        app._node_load_generation += 1
-        worker = app._load_node_worker(paths[0], stale_generation)
+        worker = app._load_node_worker(paths[0])
         await worker.wait()
         for _ in range(50):
             if "echo no-output" in content._content_cache.get("script", ""):

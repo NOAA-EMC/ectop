@@ -311,7 +311,7 @@ class Ectop(App):
         self.refresh_interval = refresh_interval
         self.ecflow_client: EcflowClient | None = None
         self._search_timer: Any | None = None
-        self._node_load_generation = 0
+        self._selected_node_path: str | None = None
         self._refresh_in_flight = False
         self._refresh_pending = False
         self._refresh_run_count = 0
@@ -347,7 +347,8 @@ class Ectop(App):
         Args:
             event: The node selection event.
         """
-        if event.node.data:
+        self._selected_node_path = event.node.data
+        if self._selected_node_path:
             self.action_load_node()
 
     @work
@@ -533,8 +534,14 @@ class Ectop(App):
             The absolute path of the selected node, or None if no node is selected.
         """
         try:
-            node = self.query_one("#suite_tree", SuiteTree).cursor_node
-            return node.data if node else None
+            tree = self.query_one("#suite_tree", SuiteTree)
+            node = tree.cursor_node
+            if node and node.data:
+                self._selected_node_path = node.data
+                return node.data
+            # A tree refresh rebuilds asynchronously, temporarily clearing its
+            # cursor before restoring the selection and firing another event.
+            return self._selected_node_path
         except Exception:
             return None
 
@@ -542,22 +549,19 @@ class Ectop(App):
         """
         Fetch Output, Script, and Job files for the selected node.
         """
-        self._node_load_generation += 1
-        generation = self._node_load_generation
         path = self.get_selected_path()
         if not path:
             self.notify("No node selected", severity="warning")
             return
-        self._load_node_worker(path, generation)
+        self._load_node_worker(path)
 
     @work(group="node-files", exclusive=False)
-    async def _load_node_worker(self, path: str, generation: int) -> None:
+    async def _load_node_worker(self, path: str) -> None:
         """
         Worker to fetch files for a node in parallel.
 
         Args:
             path: The ecFlow node path.
-            generation: The selected-node request generation.
 
         Returns:
             None
@@ -577,7 +581,7 @@ class Ectop(App):
             await self.ecflow_client.sync_local()
         except RuntimeError:
             pass
-        if generation != self._node_load_generation or self.get_selected_path() != path:
+        if self.get_selected_path() != path:
             return
 
         async def _fetch_file(file_type: str, widget_id: str, update_fn: Any) -> None:
@@ -592,11 +596,11 @@ class Ectop(App):
             try:
                 assert self.ecflow_client is not None
                 content = await self.ecflow_client.file(path, file_type)
-                if generation != self._node_load_generation or self.get_selected_path() != path:
+                if self.get_selected_path() != path:
                     return
                 update_fn(content)
             except RuntimeError:
-                if generation == self._node_load_generation and self.get_selected_path() == path:
+                if self.get_selected_path() == path:
                     content_area.show_error(widget_id, f"File type '{file_type}' not available.")
 
         async def _fetch_timeline() -> None:
@@ -608,7 +612,7 @@ class Ectop(App):
                 node = tree.defs.find_abs_node(path)
                 if node:
                     timeline_data = await asyncio.to_thread(gather_timeline_data, node)
-                    if generation == self._node_load_generation and self.get_selected_path() == path:
+                    if self.get_selected_path() == path:
                         content_area.update_timeline(timeline_data)
 
         await asyncio.gather(

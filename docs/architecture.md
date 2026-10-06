@@ -1,3 +1,4 @@
+<!-- If you modify features, API, or usage, you MUST update the documentation immediately. -->
 # Architecture
 
 `ectop` is built using the [Textual](https://textual.textualize.io/) framework, providing a modern and responsive TUI experience.
@@ -38,9 +39,9 @@ To maintain a smooth UI, all blocking calls to the ecFlow server (which involve 
 - **Latest Search Wins**: Search input is debounced, searches all paths including collapsed branches, and applies a result only when both its query and definition generations are current. Clearing, cancelling, or leaving the search field invalidates pending results.
 - **Serialized ecFlow Client**: Calls through the shared `ecflow.Client` remain protected by one lock because the ecFlow API does not document safe concurrent access.
 - **Exclusive Workers**: Operations that supersede earlier work use `exclusive=True` within their own named group.
-- **Node Files**: Output, script, and processed-job requests are submitted as separate background calls. Each view receives its own success or error, while the shared client lock continues to serialize native ecFlow calls. Navigation increments the request generation; results for a different current node are dropped.
+- **Node Files**: Output, script, and processed-job requests are submitted as separate background calls. Each view receives its own success or error, while the shared client lock continues to serialize native ecFlow calls. The app tracks the selected path across asynchronous tree refreshes; results for a different current node are dropped.
 - **Script Editing**: `$EDITOR` is split into an executable and arguments with shell-style quoting, then launched without a shell. Only a successful process that changes the file atomically replaces its ecFlow `.ecf` source. ectop resolves the source from `ECF_SCRIPT`, `ECF_FILES`, or `ECF_HOME`; the source must be accessible and writable on the machine running ectop. The temporary edit file is removed for success, failure, and cancellation. ecFlow locates scripts using these variables and directory search rules ([official file-location algorithm](https://ecflow.readthedocs.io/en/5.13.0/glossary.html#ecf-file-location-algorithm)).
-- **Textual Support Floor**: ectop requires Textual 0.37.0 because its command provider uses the command palette introduced in 0.37.0. The worker API appeared in 0.18.0 and threaded workers require explicit `thread=True` from 0.31.0. See the official [0.18 worker release](https://textual.textualize.io/blog/2023/04/04/textual-0180-adds-api-for-managing-concurrent-workers/), [0.31 worker FAQ](https://textual.textualize.io/FAQ/#how-do-i-fix-workerdeclarationerror), and [0.37 command palette release](https://textual.textualize.io/blog/2023/09/15/textual-0370-adds-a-command-palette/).
+- **Textual Support Floor**: ectop supports Textual 0.70.0 and newer. CI tests the declared minimum and the latest release; older versions are outside the supported range.
 
 ## Event Loop
 

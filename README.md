@@ -34,7 +34,7 @@ conda activate ectop
 pip install .
 ```
 
-ectop supports Textual 0.37.0 and newer; the project metadata installs this range automatically. `ecflow` must also be installed on your system. It is typically available via Conda.
+ectop supports Textual 0.70.0 and newer; the project metadata installs this range automatically. `ecflow` must also be installed on your system. It is typically available via Conda.
 
 ## Usage
 

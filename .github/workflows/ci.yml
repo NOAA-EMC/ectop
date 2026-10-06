@@ -47,7 +47,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
-        textual-version: ["0.37.0", "latest"]
+        textual-version: ["0.70.0", "latest"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Conda/Miniforge
