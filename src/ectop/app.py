@@ -422,47 +422,53 @@ class Ectop(App):
             self._refresh_pending = True
             return None
         self._refresh_in_flight = True
-        return self._tree_refresh_worker()
+        return self._tree_refresh_worker(self.ecflow_client)
 
     @work(group="tree-refresh", exclusive=False)
-    async def _tree_refresh_worker(self) -> None:
+    async def _tree_refresh_worker(self, client: EcflowClient | None = None) -> None:
         """
         Fetch definitions and server status off the event loop, then publish them.
 
-        Returns:
-            None
+        Parameters
+        ----------
+        client : EcflowClient | None
+            Client instance captured when the refresh was requested. The current
+            app client is used when no client is provided.
 
-        Raises:
-            RuntimeError: If synchronization with the server fails.
-            Exception: For unexpected errors.
+        Returns
+        -------
+        None
 
-        Notes:
-            This is an async background worker.
+        Notes
+        -----
+        Capturing the client prevents a refresh from switching servers if the
+        app's client is replaced while the worker is running.
         """
-        if not self.ecflow_client:
+        client = client or self.ecflow_client
+        if not client:
             return
 
         self._refresh_run_count += 1
         try:
-            await self.ecflow_client.sync_local()
-            defs = await self.ecflow_client.get_defs()
+            await client.sync_local()
+            defs = await client.get_defs()
             status = "Connected"
             version = "Unknown"
             if defs:
                 status = str(defs.get_server_state())
             try:
-                version = await self.ecflow_client.server_version()
+                version = await client.server_version()
             except RuntimeError:
                 pass
 
             tree = self.query_one("#suite_tree", SuiteTree)
             status_bar = self.query_one("#status_bar", StatusBar)
-            tree.update_tree(self.ecflow_client.host, self.ecflow_client.port, defs)
-            status_bar.update_status(self.ecflow_client.host, self.ecflow_client.port, status=status, version=version)
+            tree.update_tree(client.host, client.port, defs)
+            status_bar.update_status(client.host, client.port, status=status, version=version)
         except RuntimeError as e:
             if self.is_running:
                 status_bar = self.query_one("#status_bar", StatusBar)
-                status_bar.update_status(self.ecflow_client.host, self.ecflow_client.port, status=STATUS_SYNC_ERROR)
+                status_bar.update_status(client.host, client.port, status=STATUS_SYNC_ERROR)
                 self.notify(f"Refresh Error: {e}", severity="error")
         except Exception as e:
             if self.is_running:
@@ -544,7 +550,7 @@ class Ectop(App):
             return
         self._load_node_worker(path, generation)
 
-    @work(group="node-files", exclusive=True)
+    @work(group="node-files", exclusive=False)
     async def _load_node_worker(self, path: str, generation: int) -> None:
         """
         Worker to fetch files for a node in parallel.
