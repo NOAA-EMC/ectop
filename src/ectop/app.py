@@ -312,6 +312,7 @@ class Ectop(App):
         self.ecflow_client: EcflowClient | None = None
         self._search_timer: Any | None = None
         self._selected_node_path: str | None = None
+        self._initial_connect_worker: Any | None = None
         self._refresh_in_flight = False
         self._refresh_pending = False
         self._refresh_run_count = 0
@@ -336,7 +337,7 @@ class Ectop(App):
         """
         Handle the mount event to start the application.
         """
-        self._initial_connect()
+        self._initial_connect_worker = self._initial_connect()
         self.set_interval(self.refresh_interval, self._automatic_refresh_tick)
         self.set_interval(self.refresh_interval, self._live_log_tick)
 
