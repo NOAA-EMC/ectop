@@ -41,21 +41,18 @@ async def test_app_action_requeue():
 @pytest.mark.asyncio
 async def test_app_action_copy_path():
     """Verify that action_copy_path notifies the user."""
-    mock_client = MagicMock()
-    mock_client.get_defs.return_value = MagicMock()
-    with patch("ectop.app.EcflowClient", return_value=mock_client):
-        app = Ectop()
-        # Mock call_from_thread to avoid thread-check issues in run_test
-        app.call_from_thread = lambda callback, *args, **kwargs: callback(*args, **kwargs)
+    app = Ectop()
+    # This unit test exercises only path copying; skip the startup connection.
+    app._initial_connect = MagicMock()
 
-        with patch.object(app, "notify") as mock_notify:
-            async with app.run_test() as pilot:
-                with patch.object(Ectop, "get_selected_path", return_value="/suite/task"):
-                    app.action_copy_path()
-                    await pilot.pause()
-                    mock_notify.assert_called()
-                    args, _ = mock_notify.call_args
-                    assert "/suite/task" in args[0]
+    with patch.object(app, "notify") as mock_notify:
+        async with app.run_test() as pilot:
+            with patch.object(Ectop, "get_selected_path", return_value="/suite/task"):
+                app.action_copy_path()
+                await pilot.pause()
+                mock_notify.assert_called()
+                args, _ = mock_notify.call_args
+                assert "/suite/task" in args[0]
 
 
 @pytest.mark.asyncio
