@@ -1,5 +1,390 @@
 # CHANGELOG
 
+## v0.2.0 (2026-10-07)
+
+### Feature
+
+* feat: improve refresh logic (#66)
+
+This pull request introduces several improvements to documentation,
+CI/CD workflow, and codebase robustness, focusing on enforcing
+documentation updates, semantic versioning, and compatibility
+requirements. It adds clear contributor guidelines, strengthens the
+release process, improves configuration validation, and enhances the
+reliability of background refreshes and file editing. The most important
+changes are grouped below.
+
+**Documentation and Contribution Policy:**
+
+* Added prominent notices to all major documentation and config files
+(`README.md`, `docs/`, `environment.yml`, `pyproject.toml`,
+`.github/workflows/ci.yml`) requiring immediate documentation updates
+when features, API, or usage are modified.
+[[1]](diffhunk://#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5R1)
+[[2]](diffhunk://#diff-419d79ae7d440d49b3fa5fa7739f5f3a359e3ca42c3fa942e5604ae3474eb35bR1)
+[[3]](diffhunk://#diff-2e046795c81fb2bcc2667705f88c6421fa988047f147ddb2333ec8da5f638b7bR3-R4)
+[[4]](diffhunk://#diff-9efd195f4e9bfb79ccd456a1d8370fafcc4bcb0b00ea3799222667d2ae818533R1-R7)
+[[5]](diffhunk://#diff-50c86b7ed8ac2cf95bd48334961bf0530cdc77b5a56f852c5c61b89d735fd711R1)
+[[6]](diffhunk://#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03fR1)
+* Expanded contributor guidelines to require Conventional Commit PR
+titles, explain semantic versioning, and describe the automated release
+process, including branch protection and workflow permissions.
+
+**CI/CD and Release Automation:**
+
+* Updated the GitHub Actions workflow (`ci.yml`) to add a job that
+enforces Conventional Commit PR titles, runs tests against multiple
+`textual` versions (including `0.37.0` and `latest`), and automates
+semantic-release versioning and GitHub Releases.
+[[1]](diffhunk://#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03fR26-R50)
+[[2]](diffhunk://#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03fR65-R71)
+[[3]](diffhunk://#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03fR92-R101)
+* Configured `pyproject.toml` and the workflow to require
+`textual&gt;=0.37.0` and to use the conventional commit parser for
+semantic-release.
+[[1]](diffhunk://#diff-50c86b7ed8ac2cf95bd48334961bf0530cdc77b5a56f852c5c61b89d735fd711L16-R17)
+[[2]](diffhunk://#diff-50c86b7ed8ac2cf95bd48334961bf0530cdc77b5a56f852c5c61b89d735fd711R56-R57)
+[[3]](diffhunk://#diff-9efd195f4e9bfb79ccd456a1d8370fafcc4bcb0b00ea3799222667d2ae818533R1-R7)
+
+**Configuration and Validation Improvements:**
+
+* Clarified and enforced validation for `--host`, `--port`, and
+`--refresh` options in documentation and usage, specifying accepted
+value ranges and error handling for invalid inputs. Command-line
+arguments now override environment variables, and error messages are
+more descriptive.
+[[1]](diffhunk://#diff-2e046795c81fb2bcc2667705f88c6421fa988047f147ddb2333ec8da5f638b7bL13-R23)
+[[2]](diffhunk://#diff-2e046795c81fb2bcc2667705f88c6421fa988047f147ddb2333ec8da5f638b7bL29-R37)
+[[3]](diffhunk://#diff-abe1e09771cc949a765515b0f1ae2d0c4a6ab90fceae133c7ea3efdc49fb65a6L111-R125)
+
+**Feature and Usage Documentation:**
+
+* Updated documentation and tutorial to clarify how search, refresh, and
+file retrieval work—including debounced search, coalesced refreshes, and
+independent file view results. Added detailed explanations for script
+editing, refresh intervals, and connection settings.
+[[1]](diffhunk://#diff-140eef3ba41bdcf401d507408084181f2c0ac627532b61e0f7906ea7cc926782L34-R49)
+[[2]](diffhunk://#diff-abe1e09771cc949a765515b0f1ae2d0c4a6ab90fceae133c7ea3efdc49fb65a6L81-R83)
+[[3]](diffhunk://#diff-abe1e09771cc949a765515b0f1ae2d0c4a6ab90fceae133c7ea3efdc49fb65a6R97-R98)
+[[4]](diffhunk://#diff-abe1e09771cc949a765515b0f1ae2d0c4a6ab90fceae133c7ea3efdc49fb65a6L111-R125)
+[[5]](diffhunk://#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5L36-R37)
+
+**Codebase Robustness:**
+
+* Refactored the refresh logic in `src/ectop/app.py` to coalesce
+overlapping automatic refreshes, preventing unbounded queues and
+ensuring only one follow-up refresh is scheduled if a previous one is
+still running.
+[[1]](diffhunk://#diff-b931e6b6cdd1147788d2753731e5ce805f1d8a21a185483602b92616afdcedf5R312-R316)
+[[2]](diffhunk://#diff-b931e6b6cdd1147788d2753731e5ce805f1d8a21a185483602b92616afdcedf5R339)
+[[3]](diffhunk://#diff-b931e6b6cdd1147788d2753731e5ce805f1d8a21a185483602b92616afdcedf5L381-R429)
+* Improved script editing to support editors with quoted arguments and
+ensured atomic file updates only on successful edits.
+[[1]](diffhunk://#diff-b931e6b6cdd1147788d2753731e5ce805f1d8a21a185483602b92616afdcedf5R16-R17)
+[[2]](diffhunk://#diff-abe1e09771cc949a765515b0f1ae2d0c4a6ab90fceae133c7ea3efdc49fb65a6L111-R125)
+[[3]](diffhunk://#diff-2e046795c81fb2bcc2667705f88c6421fa988047f147ddb2333ec8da5f638b7bL29-R37)
+
+These changes collectively enhance project maintainability, release
+reliability, and user experience. ([`4f89966`](https://github.com/NOAA-EMC/ectop/commit/4f89966589078f8faca0a976699d026532742ac1))
+
+### Fix
+
+* fix: fix release CI  (#67)
+
+This pull request introduces comprehensive improvements to
+documentation, developer workflow, and configuration validation, with a
+focus on enforcing semantic versioning and Conventional Commits. It also
+clarifies and enhances user and contributor documentation, updates
+compatibility requirements, and improves the CI pipeline for robust
+release automation.
+
+**Developer Workflow and Release Automation:**
+
+* Enforces Conventional Commit PR titles via a new `validate-pr-title`
+job in the CI workflow, blocking merges that don&#39;t follow the required
+format and ensuring semantic-release can determine the correct version
+bump.
+* Integrates Python Semantic Release into CI, automating version bumps,
+changelog updates, GitHub Releases, and artifact uploads when changes
+are merged to `main`.
+* Documents the commit message and release process in `AGENTS.md` and
+`docs/contributing.md`, including detailed rules for commit types,
+breaking changes, and merge strategies.
+[[1]](diffhunk://#diff-a54ff182c7e8acf56acfd6e4b9c3ff41e2c41a31c9b211b2deb9df75d9a478f9R35-R41)
+[[2]](diffhunk://#diff-419d79ae7d440d49b3fa5fa7739f5f3a359e3ca42c3fa942e5604ae3474eb35bR71-R85)
+
+**Documentation and Configuration Updates:**
+
+* Adds a prominent reminder to update documentation immediately when
+modifying features, API, or usage, at the top of all major documentation
+and configuration files.
+[[1]](diffhunk://#diff-50c86b7ed8ac2cf95bd48334961bf0530cdc77b5a56f852c5c61b89d735fd711R1)
+[[2]](diffhunk://#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5R1)
+[[3]](diffhunk://#diff-140eef3ba41bdcf401d507408084181f2c0ac627532b61e0f7906ea7cc926782R1)
+[[4]](diffhunk://#diff-419d79ae7d440d49b3fa5fa7739f5f3a359e3ca42c3fa942e5604ae3474eb35bR1)
+[[5]](diffhunk://#diff-9efd195f4e9bfb79ccd456a1d8370fafcc4bcb0b00ea3799222667d2ae818533R1-R7)
+* Expands and clarifies user documentation on configuration options,
+file editing, refresh behavior, file retrieval, and connection settings,
+with improved error handling and validation descriptions.
+[[1]](diffhunk://#diff-2e046795c81fb2bcc2667705f88c6421fa988047f147ddb2333ec8da5f638b7bL13-R23)
+[[2]](diffhunk://#diff-2e046795c81fb2bcc2667705f88c6421fa988047f147ddb2333ec8da5f638b7bL29-R37)
+[[3]](diffhunk://#diff-abe1e09771cc949a765515b0f1ae2d0c4a6ab90fceae133c7ea3efdc49fb65a6L111-R125)
+* Updates the tutorial and architecture docs to explain new behaviors
+for search, refresh, file retrieval, and Textual compatibility.
+[[1]](diffhunk://#diff-abe1e09771cc949a765515b0f1ae2d0c4a6ab90fceae133c7ea3efdc49fb65a6L81-R83)
+[[2]](diffhunk://#diff-140eef3ba41bdcf401d507408084181f2c0ac627532b61e0f7906ea7cc926782L34-R50)
+
+**Compatibility and Dependency Management:**
+
+* Raises the minimum supported Textual version to `0.70.0` in
+`pyproject.toml`, `environment.yml`, and user documentation, and
+configures the CI matrix to test both the minimum and latest Textual
+versions.
+[[1]](diffhunk://#diff-50c86b7ed8ac2cf95bd48334961bf0530cdc77b5a56f852c5c61b89d735fd711L16-R17)
+[[2]](diffhunk://#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5L36-R37)
+[[3]](diffhunk://#diff-9efd195f4e9bfb79ccd456a1d8370fafcc4bcb0b00ea3799222667d2ae818533R1-R7)
+[[4]](diffhunk://#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03fR26-R50)
+* Documents the Textual support floor and CI coverage for supported
+versions.
+
+**Codebase and Internal Improvements:**
+
+* Begins refactoring in `src/ectop/app.py` to support improved search,
+selection, and refresh tracking, laying groundwork for more robust UI
+state management.
+[[1]](diffhunk://#diff-b931e6b6cdd1147788d2753731e5ce805f1d8a21a185483602b92616afdcedf5R16-R19)
+[[2]](diffhunk://#diff-b931e6b6cdd1147788d2753731e5ce805f1d8a21a185483602b92616afdcedf5R313-R318)
+
+**General Quality and Maintenance:**
+
+* Adds or updates reminders and comments in workflow, environment, and
+project files to reinforce documentation and release discipline.
+[[1]](diffhunk://#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03fR1)
+[[2]](diffhunk://#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5R1)
+[[3]](diffhunk://#diff-140eef3ba41bdcf401d507408084181f2c0ac627532b61e0f7906ea7cc926782R1)
+[[4]](diffhunk://#diff-9efd195f4e9bfb79ccd456a1d8370fafcc4bcb0b00ea3799222667d2ae818533R1-R7)
+[[5]](diffhunk://#diff-50c86b7ed8ac2cf95bd48334961bf0530cdc77b5a56f852c5c61b89d735fd711R1)
+
+These changes collectively ensure that ectop&#39;s release process is
+reliable, user-facing changes are well-documented, and contributors
+follow best practices for semantic versioning and maintainability.
+
+**References:**
+[[1]](diffhunk://#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03fR26-R50)
+[[2]](diffhunk://#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03fR92-R101)
+[[3]](diffhunk://#diff-a54ff182c7e8acf56acfd6e4b9c3ff41e2c41a31c9b211b2deb9df75d9a478f9R35-R41)
+[[4]](diffhunk://#diff-419d79ae7d440d49b3fa5fa7739f5f3a359e3ca42c3fa942e5604ae3474eb35bR71-R85)
+[[5]](diffhunk://#diff-50c86b7ed8ac2cf95bd48334961bf0530cdc77b5a56f852c5c61b89d735fd711L16-R17)
+[[6]](diffhunk://#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5L36-R37)
+[[7]](diffhunk://#diff-9efd195f4e9bfb79ccd456a1d8370fafcc4bcb0b00ea3799222667d2ae818533R1-R7)
+[[8]](diffhunk://#diff-2e046795c81fb2bcc2667705f88c6421fa988047f147ddb2333ec8da5f638b7bL13-R23)
+[[9]](diffhunk://#diff-2e046795c81fb2bcc2667705f88c6421fa988047f147ddb2333ec8da5f638b7bL29-R37)
+[[10]](diffhunk://#diff-abe1e09771cc949a765515b0f1ae2d0c4a6ab90fceae133c7ea3efdc49fb65a6L111-R125)
+[[11]](diffhunk://#diff-140eef3ba41bdcf401d507408084181f2c0ac627532b61e0f7906ea7cc926782L34-R50)
+[[12]](diffhunk://#diff-b931e6b6cdd1147788d2753731e5ce805f1d8a21a185483602b92616afdcedf5R16-R19)
+[[13]](diffhunk://#diff-b931e6b6cdd1147788d2753731e5ce805f1d8a21a185483602b92616afdcedf5R313-R318)
+[[14]](diffhunk://#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03fR1)
+[[15]](diffhunk://#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5R1)
+[[16]](diffhunk://#diff-140eef3ba41bdcf401d507408084181f2c0ac627532b61e0f7906ea7cc926782R1)
+[[17]](diffhunk://#diff-50c86b7ed8ac2cf95bd48334961bf0530cdc77b5a56f852c5c61b89d735fd711R1) ([`47e9667`](https://github.com/NOAA-EMC/ectop/commit/47e96676c4c5d4aa0d62dd403cb748f09a600812))
+
+### Unknown
+
+* Refactor SuiteTree: Type Safety, Optimization, and Integration Testing (#65)
+
+This PR refactors the `SuiteTree` widget in
+`src/ectop/widgets/sidebar.py` to improve robustness, performance, and
+documentation quality.
+
+Key changes:
+- **Type Safety**: Replaced `hasattr(node, &#34;nodes&#34;)` with
+`isinstance(node, (ecflow.Suite, ecflow.Family))`. Since `Task`,
+`Family`, and `Suite` all have a `nodes` attribute in ecFlow, `hasattr`
+was unreliable for distinguishing containers.
+- **Performance Optimization**: Improved child detection in `_to_dto`
+using a defensive iterator check.
+- **Documentation**: Standardized all docstrings in the sidebar module
+to Google-style, adding detailed `Notes` for background workers.
+- **Test Hardening**: Refactored `tests/test_sidebar_performance.py`
+into a robust integration test that uses a real `ecflow_server` fixture
+to verify batching logic for large suites, replacing a brittle and
+failing mock-based test.
+- **Compatibility**: Fixed `tests/test_sidebar_filtering.py` by ensuring
+mocks use appropriate specs for `isinstance` validation.
+
+Verified with 112 passing tests in a clean Micromamba environment.
+
+---
+*PR created automatically by Jules for task
+[4433733867313041531](https://jules.google.com/task/4433733867313041531)
+started by @bbakernoaa*
+
+---------
+
+Co-authored-by: bbakernoaa &lt;22104759+bbakernoaa@users.noreply.github.com&gt; ([`d2fadd5`](https://github.com/NOAA-EMC/ectop/commit/d2fadd56456ae05888a475397362c80a92a74692))
+
+* Aero Protocol: WhyInspector Refactor and Search Optimization (#64)
+
+This PR implements key optimizations and robustness improvements
+following the Aero Protocol.
+
+1. **WhyInspector Robustness**: The `WhyInspector` was refactored to
+gather all necessary node states into a local `state_map` before
+performing recursive trigger evaluation. This decouples the evaluation
+logic from the live `ecflow.Defs` object, bypassing intermittent
+`find_abs_node` lookup failures observed in some environments.
+2. **Search Responsiveness**: The `MainContent` widget now offloads
+`Rich.Text` highlight generation (including the `Text.stylize` loop) to
+a background thread worker. This prevents micro-stutters when searching
+through large logs or scripts with many matches.
+3. **High-Fidelity Testing**: Brittle unit mocks in
+`tests/test_sidebar.py` were replaced with integration tests utilizing
+Textual&#39;s `pilot` driver and a real `ecflow_server` fixture, ensuring
+the UI reactions are verified against actual server state transitions.
+
+All changes have been validated with the full test suite and pass all
+`pre-commit` hooks.
+
+---
+*PR created automatically by Jules for task
+[5554322203880127079](https://jules.google.com/task/5554322203880127079)
+started by @bbakernoaa*
+
+Co-authored-by: bbakernoaa &lt;22104759+bbakernoaa@users.noreply.github.com&gt; ([`9d0e044`](https://github.com/NOAA-EMC/ectop/commit/9d0e0446f32ebe2e177767404f425e9a7e46ae92))
+
+* Modernize Docs and Tests for Aero Protocol Compliance (#63)
+
+This PR brings several core components and tests into alignment with the
+Aero Protocol.
+
+Key changes:
+1. **Documentation Standard**: Converted all docstrings in
+`src/ectop/utils.py`, `src/ectop/widgets/modals/confirm.py`,
+`src/ectop/widgets/modals/why.py`, `src/ectop/widgets/statusbar.py`, and
+`src/ectop/widgets/search.py` to Google-style. This ensures better
+maintainability and adheres to the project&#39;s strict engineering
+standards.
+2. **Robust Testing**: Refactored the `SuiteTree` (sidebar) tests.
+Previous tests relied heavily on `unittest.mock` to patch Textual
+internals like `tree.root` and `tree.clear`, which masked potential
+integration bugs. The new `test_update_tree_integrated` and
+`test_load_children_integrated` use the Textual `pilot` driver to
+interact with the widget as a real user would, ensuring reactive states
+and background workers are properly orchestrated.
+3. **Zero-Trust Validation**: All changes have been verified through a
+full CI-like pass (pytest + pre-commit) in a dedicated Micromamba
+environment to ensure no regressions were introduced.
+
+---
+*PR created automatically by Jules for task
+[11148639312103677190](https://jules.google.com/task/11148639312103677190)
+started by @bbakernoaa*
+
+Co-authored-by: bbakernoaa &lt;22104759+bbakernoaa@users.noreply.github.com&gt; ([`31b5ddc`](https://github.com/NOAA-EMC/ectop/commit/31b5ddc6489948516face9014dfd855692165721))
+
+* Optimize Responsiveness and Decouple SuiteTree UI from ecFlow API (#62)
+
+This PR improves the responsiveness and maintainability of the `ectop`
+TUI by implementing two key optimizations:
+
+1. **Decoupled UI State for SuiteTree**: The `SuiteTree` widget now uses
+a `NodeDTO` (Data Transfer Object) to store node information. This
+ensures that the UI thread only interacts with plain Python objects
+rather than heavy C++ extension objects from the `ecflow` library. The
+conversion from `ecflow.Node` to `NodeDTO` is performed in background
+workers, preventing potential UI jitters when processing large trees.
+
+2. **Hardened Non-Blocking I/O**: Synchronous file system operations
+(`os.path.exists` and `os.unlink`) in the script editing workflow have
+been wrapped in `asyncio.to_thread` to ensure the event loop is never
+blocked by I/O.
+
+These changes adhere to the Aero Protocol&#39;s requirements for
+responsiveness, decoupling, and zero-trust coding through rigorous
+verification.
+
+---
+*PR created automatically by Jules for task
+[7363372547805027357](https://jules.google.com/task/7363372547805027357)
+started by @bbakernoaa*
+
+Co-authored-by: bbakernoaa &lt;22104759+bbakernoaa@users.noreply.github.com&gt; ([`4aa4d2a`](https://github.com/NOAA-EMC/ectop/commit/4aa4d2a264e6c52070322aef56cb1ea77c54dfe3))
+
+* Enhance Content Search with Highlighting and Navigation (#60)
+
+This PR enhances the content search functionality in the `MainContent`
+widget.
+
+Key improvements:
+1. **Visual Highlighting:** All search matches are now highlighted using
+Rich Text styling. The current match is distinguished with a different
+color.
+2. **Navigation:** Users can now cycle through matches using the &#39;n&#39;
+(Next Match) and &#39;N&#39; (Previous Match) keys.
+3. **Automatic Scrolling:** The view automatically scrolls to the
+current match, ensuring it is always visible.
+4. **Non-blocking Execution:** Match offset calculations are performed
+in a background worker to maintain UI responsiveness.
+5. **Multi-tab Support:** Enhanced search works across Output, Script,
+and Job tabs.
+
+Testing:
+- New integration test `tests/test_content_search_enhanced.py` covers
+searching, highlighting, and navigation.
+- Existing widget and sidebar tests pass.
+- Pre-commit hooks (ruff, trailing-whitespace, etc.) passed.
+
+---
+*PR created automatically by Jules for task
+[2182557761449527126](https://jules.google.com/task/2182557761449527126)
+started by @bbakernoaa*
+
+Co-authored-by: bbakernoaa &lt;22104759+bbakernoaa@users.noreply.github.com&gt; ([`5cc176d`](https://github.com/NOAA-EMC/ectop/commit/5cc176d8dbe9a635fc85ec71cdf8a905ad44b570))
+
+* Optimize node data fetching with parallel I/O (#59)
+
+Refactor _load_node_worker in src/ectop/app.py to use asyncio.gather for
+parallel fetching of jobout, script, job, and timeline data. This
+optimization significantly improves the responsiveness of the TUI when
+selecting nodes in large ecFlow suites. Added a comprehensive
+integration test to verify the parallel loading logic.
+
+---
+*PR created automatically by Jules for task
+[5042271345527980290](https://jules.google.com/task/5042271345527980290)
+started by @bbakernoaa*
+
+Co-authored-by: bbakernoaa &lt;22104759+bbakernoaa@users.noreply.github.com&gt; ([`80222e0`](https://github.com/NOAA-EMC/ectop/commit/80222e0078db165ebac238fc52473ef77d5c823e))
+
+* Optimize Log Rendering and Standardize Documentation (#58)
+
+I have optimized the log rendering process to ensure the UI remains 100%
+responsive even when handling large ecFlow job logs. The expensive
+operation of calculating log deltas is now offloaded to a background
+thread. Additionally, I have brought the `timeline` widget and `app`
+workers into full compliance with the Aero Protocol&#39;s documentation and
+testing standards.
+
+Key Changes:
+- **Responsiveness:** `Ectop._live_log_worker` now uses
+`asyncio.to_thread` to calculate string differences in the background.
+- **Efficiency:** `MainContent.update_log` accepts an optional `delta`
+to avoid redundant clears and full-content writes to the `RichLog`
+widget.
+- **Compliance:** Standardized docstrings and added the mandatory
+maintenance header to `src/ectop/widgets/timeline.py`.
+- **Validation:** Added `tests/test_log_optimization.py` with 4 new
+tests. All 112 tests in the suite are passing.
+
+---
+*PR created automatically by Jules for task
+[11781267145569492215](https://jules.google.com/task/11781267145569492215)
+started by @bbakernoaa*
+
+---------
+
+Co-authored-by: bbakernoaa &lt;22104759+bbakernoaa@users.noreply.github.com&gt; ([`3211652`](https://github.com/NOAA-EMC/ectop/commit/32116525a0bf7a16c633232b7a2b6ccda6864a57))
+
 ## v0.1.0 (2026-05-06)
 
 ### Documentation
@@ -669,11 +1054,11 @@ refresh and file loading) trigger stateful operations simultaneously.
 background population and lazy loading. By adding nodes in groups of 50
 via a single `call_from_thread` operation, we significantly reduce event
 loop pressure and UI &#34;jank&#34; in large environments.
-3.  **Aero Protocol Compliance:**
+3.  **Aero Protocol Compliance:** 
     - All modified code follows **Google-style docstrings**.
 - Removed AI-specific meta-references and non-standard block headers.
     - Standardized on `_safe_call` for all cross-thread UI updates.
-4.  **Harden Tests:**
+4.  **Harden Tests:** 
 - Added `tests/test_concurrency_harden.py` to verify lock serialization.
 - Added `tests/test_sidebar_performance.py` to verify batching logic.
     - Updated existing tests to reflect architectural changes.
